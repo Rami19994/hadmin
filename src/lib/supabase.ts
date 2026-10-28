@@ -1,10 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 
-export const SUPABASE_URL =
-  import.meta.env.VITE_SUPABASE_URL || 'https://ffoeosleputnezuafpcu.supabase.co';
-
+/**
+ * الربط الحصري بمشروع Supabase الرسمي للمنصة:
+ * Account: aitch.aitchstore@gmail.com's Project
+ * Project Ref: ffoeosleputnezuafpcu
+ */
+export const SUPABASE_ACCOUNT_EMAIL = 'aitch.aitchstore@gmail.com';
+export const SUPABASE_PROJECT_REF = 'ffoeosleputnezuafpcu';
+export const SUPABASE_URL = 'https://ffoeosleputnezuafpcu.supabase.co';
 export const SUPABASE_PUBLISHABLE_KEY =
-  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
   'sb_publishable_XdzT2i_YcRcUQ1SLdCkazw_CgNoF5gU';
 
 export const CATALOG_BUCKET = 'catalog';

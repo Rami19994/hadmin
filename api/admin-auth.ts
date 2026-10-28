@@ -17,10 +17,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return res.status(200).end();
   }
 
-  const supabaseUrl =
-    process.env.SUPABASE_URL ||
-    process.env.VITE_SUPABASE_URL ||
-    'https://ffoeosleputnezuafpcu.supabase.co';
+  // مربوط حصرياً بمشروع Supabase الرسمي (aitch.aitchstore@gmail.com's Project)
+  const supabaseUrl = 'https://ffoeosleputnezuafpcu.supabase.co';
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
   if (req.method === 'GET') {

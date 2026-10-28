@@ -47,6 +47,351 @@ insert into public.app_settings (id) values (true)
 on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------
+-- 1b. متطلبات خطط الاشتراكات (0011) والأقسام الإلزامية والإخفاء (0012)
+--     مدمجة هنا بشكل آمن (Idempotent) ليعمل الملف دفعة واحدة على المشروع
+--     `ffoeosleputnezuafpcu` (aitch.aitchstore@gmail.com's Project)
+-- ---------------------------------------------------------------------
+
+alter table public.stores
+  add column if not exists plan_tier text check (plan_tier in ('small', 'medium', 'large')),
+  add column if not exists plan_name text,
+  add column if not exists max_images int not null default 2000,
+  add column if not exists extra_images int not null default 0,
+  add column if not exists subscription_status text not null default 'unpaid'
+    check (subscription_status in ('unpaid', 'active', 'expired', 'trial')),
+  add column if not exists subscription_price numeric(10,2) default 100.00,
+  add column if not exists subscription_started_at timestamptz;
+
+create table if not exists public.store_subscriptions (
+  id                  uuid primary key default gen_random_uuid(),
+  store_id            uuid not null references public.stores(id) on delete cascade,
+  plan_tier           text not null check (plan_tier in ('small', 'medium', 'large')),
+  plan_name           text not null,
+  amount              numeric(10,2) not null,
+  currency            text not null default 'USD',
+  duration_months     int not null default 12,
+  payment_method      text not null,
+  payment_reference   text,
+  payment_status      text not null default 'paid' check (payment_status in ('pending', 'paid', 'failed')),
+  max_images          int not null default 2000,
+  starts_at           timestamptz not null default now(),
+  expires_at          timestamptz not null default (now() + interval '1 year'),
+  created_at          timestamptz not null default now()
+);
+
+alter table public.store_subscriptions enable row level security;
+grant select, insert, update, delete on table public.store_subscriptions to authenticated;
+create index if not exists store_subscriptions_store_id_idx on public.store_subscriptions (store_id);
+
+drop policy if exists "store_subscriptions: owner reads" on public.store_subscriptions;
+create policy "store_subscriptions: owner reads"
+  on public.store_subscriptions for select to authenticated
+  using ((select public.is_store_owner(store_id)) or (select public.is_admin()));
+
+drop policy if exists "store_subscriptions: owner inserts" on public.store_subscriptions;
+create policy "store_subscriptions: owner inserts"
+  on public.store_subscriptions for insert to authenticated
+  with check ((select public.is_store_owner(store_id)) or (select public.is_admin()));
+
+create or replace function public.subscribe_store(
+  p_store_id          uuid,
+  p_plan_tier         text,
+  p_payment_method    text,
+  p_payment_reference text default null
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_amount    numeric(10,2);
+  v_images    int;
+  v_plan_name text;
+  v_expires   timestamptz;
+  v_sub_id    uuid;
+begin
+  if not public.is_store_owner(p_store_id) and not public.is_admin() then
+    raise exception 'غير مصرح لك بإدارة هذا المتجر';
+  end if;
+
+  if p_plan_tier = 'small' then
+    v_amount := 100.0;
+    v_images := 2000;
+    v_plan_name := 'خطة المتاجر الصغيرة (50-200 م²)';
+  elsif p_plan_tier = 'medium' then
+    v_amount := 300.0;
+    v_images := 4000;
+    v_plan_name := 'خطة المتاجر المتوسطة (200-500 م²)';
+  elsif p_plan_tier = 'large' then
+    v_amount := 800.0;
+    v_images := 8000;
+    v_plan_name := 'خطة المتاجر الكبيرة (500-2500 م²)';
+  else
+    raise exception 'خطة غير معروفة: %', p_plan_tier;
+  end if;
+
+  v_expires := now() + interval '1 year';
+
+  insert into public.store_subscriptions (
+    store_id, plan_tier, plan_name, amount, currency, duration_months,
+    payment_method, payment_reference, payment_status, max_images,
+    starts_at, expires_at
+  ) values (
+    p_store_id, p_plan_tier, v_plan_name, v_amount, 'USD', 12,
+    p_payment_method, p_payment_reference, 'paid', v_images,
+    now(), v_expires
+  ) returning id into v_sub_id;
+
+  update public.stores
+  set subscription_expires_at = v_expires,
+      subscription_started_at = now(),
+      plan_tier = p_plan_tier,
+      plan_name = v_plan_name,
+      max_images = v_images,
+      subscription_status = 'active',
+      subscription_price = v_amount
+  where id = p_store_id;
+
+  return jsonb_build_object(
+    'success', true,
+    'subscription_id', v_sub_id,
+    'plan_tier', p_plan_tier,
+    'plan_name', v_plan_name,
+    'amount', v_amount,
+    'max_images', v_images,
+    'expires_at', v_expires
+  );
+end;
+$$;
+
+revoke execute on function public.subscribe_store(uuid, text, text, text) from public;
+grant  execute on function public.subscribe_store(uuid, text, text, text) to authenticated;
+
+alter table public.store_categories
+  add column if not exists is_hidden boolean not null default false;
+
+update public.store_categories
+set is_hidden = true
+where position >= 10000 and is_hidden = false;
+
+create index if not exists store_categories_store_hidden_pos_idx
+  on public.store_categories (store_id, is_hidden, position);
+
+create or replace function public.category_is_visible(target uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select case
+    when target is null then true
+    else exists (
+      select 1
+      from public.store_categories c
+      where c.id = target and c.is_hidden = false
+    )
+  end;
+$$;
+
+drop policy if exists "category: public read" on public.store_categories;
+create policy "category: public read"
+  on public.store_categories for select
+  using (
+    (public.store_is_public(store_id) and not is_hidden)
+    or public.is_store_owner(store_id)
+  );
+
+drop policy if exists "product: public read" on public.products;
+create policy "product: public read"
+  on public.products for select
+  using (
+    (public.store_is_public(store_id) and public.category_is_visible(category_id))
+    or public.is_store_owner(store_id)
+  );
+
+create or replace function public.normalize_arabic_category(input text)
+returns text
+language sql
+immutable
+set search_path = public, pg_temp
+as $$
+  select trim(
+    regexp_replace(
+      translate(
+        lower(coalesce(input, '')),
+        'أإآةىؤئ'
+          || chr(1600)
+          || chr(1611) || chr(1612) || chr(1613) || chr(1614)
+          || chr(1615) || chr(1616) || chr(1617) || chr(1618)
+          || chr(1648),
+        'اااهيوي'
+      ),
+      '\s+', ' ', 'g'
+    )
+  );
+$$;
+
+create or replace function public.seed_mandatory_categories_for_store(
+  p_store_id   uuid,
+  p_store_type text default 'miniMarket',
+  p_store_name text default ''
+) returns void
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_kind     text;
+  v_base_pos integer;
+begin
+  if lower(coalesce(p_store_type, '')) = 'pharmacy'
+     or coalesce(p_store_name, '') like '%صيدلية%' then
+    v_kind := 'pharmacy';
+  elsif lower(replace(coalesce(p_store_type, ''), '_', '')) = 'autoparts' then
+    v_kind := 'auto_parts';
+  else
+    v_kind := 'grocery';
+  end if;
+
+  select coalesce(max(position), -1) + 1
+    into v_base_pos
+    from public.store_categories
+   where store_id = p_store_id
+     and is_hidden = false
+     and position < 10000;
+
+  with catalog(ord, image_key, name, aliases) as (
+    select * from (values
+      ( 1, 'vegetables',     'خضار',                  array['خضروات','خضار وفواكه']),
+      ( 2, 'fruits',         'فواكه',                 array['فاكهة']),
+      ( 3, 'milk',           'حليب وألبان',           array['البان واجبان','ألبان وأجبان','البان','ألبان']),
+      ( 4, 'cheese',         'أجبان',                 array['جبنة','اجبان']),
+      ( 5, 'eggs',           'بيض',                   array[]::text[]),
+      ( 6, 'butter',         'زبدة وسمنة',            array['سمنة وزبدة','زبدة','سمنة']),
+      ( 7, 'meat',           'لحوم',                  array['ملحمة','لحم']),
+      ( 8, 'chicken',        'دجاج',                  array['فروج','دواجن']),
+      ( 9, 'fish',           'سمك',                   array['أسماك','ماكولات بحرية','مأكولات بحرية']),
+      (10, 'bread',          'خبز',                   array['خبز ومعجنات','مخبوزات','معجنات']),
+      (11, 'rice',           'أرز وحبوب',             array['رز','ارز','أرز','ارز وحبوب','حبوب']),
+      (12, 'pasta',          'معكرونة',               array['مكرونة','معكرونة وشعيرية']),
+      (13, 'flour',          'طحين',                  array['دقيق','طحين وخبيز']),
+      (14, 'legumes',        'بقوليات',               array['بقول']),
+      (15, 'oil',            'زيوت',                  array['زيوت وسمن','زيت']),
+      (16, 'canned',         'معلبات وصلصات',         array['معلبات','صلصات']),
+      (17, 'spices',         'بهارات وتوابل',         array['بهارات','توابل','عطارة']),
+      (18, 'salt',           'ملح وسكر',              array['مستلزمات الطبخ','سكر وملح']),
+      (19, 'honey',          'عسل ومربى',             array['عسل','مربى','مربيات']),
+      (20, 'nuts',           'مكسرات وبزورية',        array['مكسرات','بزورية','محمصة']),
+      (21, 'sweets',         'حلويات وبسكويت',        array['حلويات','بسكويت','شوكولا','سكاكر']),
+      (22, 'chips',          'شيبس ومقرمشات',         array['مقرمشات','شيبس وبسكويت','شيبس','سناك']),
+      (23, 'water',          'مياه',                  array['مياه ومشروبات باردة','ماء']),
+      (24, 'juice',          'عصائر',                 array['عصير']),
+      (25, 'soda',           'مشروبات غازية',         array['مشروبات باردة','غازيات']),
+      (26, 'tea',            'شاي',                   array['شاي وقهوة']),
+      (27, 'coffee',         'قهوة',                  array['بن','بن وقهوة']),
+      (28, 'detergent',      'مواد تنظيف',            array['منظفات','منظفات وورقيات']),
+      (29, 'cleaning_tools', 'أدوات تنظيف',           array['ادوات تنظيف']),
+      (30, 'soap',           'صابون وعناية شخصية',    array['صابون','عناية شخصية','شامبو وصابون']),
+      (31, 'tissues',        'مناديل ورقية',          array['ورقيات','محارم','مناديل']),
+      (32, 'baby',           'مستلزمات أطفال',        array['اطفال','أطفال','حفاضات']),
+      (33, 'household',      'أدوات منزلية',          array['ادوات منزلية','مستهلكات منزلية']),
+      (34, 'batteries',      'بطاريات',               array['كهربائيات خفيفة']),
+      (35, 'stationery',     'قرطاسية',               array['أدوات مكتبية']),
+      (36, 'box',            'متنوعات',               array['أخرى','اخرى'])
+    ) as g(ord, image_key, name, aliases)
+    where v_kind = 'grocery'
+
+    union all
+
+    select * from (values
+      ( 1, 'medicine',       'أدوية ومسكنات',         array['أدوية','مسكنات']),
+      ( 2, 'capsule',        'كبسولات ومضادات',       array['مضادات','كبسولات']),
+      ( 3, 'syrup',          'شراب طبي وسعال',        array['شراب طبي']),
+      ( 4, 'vitamins',       'فيتامينات ومكملات',     array['فيتامينات','مكملات غذائية']),
+      ( 5, 'ointment',       'مراهم وعناية بالبشرة',  array['مرهم وكريم طبي','مستحضرات العناية بالبشرة','كريمات تنظيف البشرة']),
+      ( 6, 'first_aid',      'إسعافات أولية',         array[]::text[]),
+      ( 7, 'bandage',        'ضمادات وشاش طبي',       array['ضمادات','شاش طبي']),
+      ( 8, 'thermometer',    'أجهزة قياس طبية',       array['ميزان حرارة']),
+      ( 9, 'eyedrops',       'قطرات عين وأذن وأنف',   array['قطرة عين وأذن']),
+      (10, 'mask',           'كمامات ومستلزمات وقاية',array['كمامات طبية','معقمات وكمامات']),
+      (11, 'baby_milk',      'حليب ومغذيات أطفال',    array['حليب أطفال طبي']),
+      (12, 'baby',           'مستلزمات أطفال',        array[]::text[]),
+      (13, 'soap',           'عناية شخصية وصابون',    array['صابون']),
+      (14, 'tissues',        'مناديل وقطن طبي',       array['مناديل ورقية'])
+    ) as p(ord, image_key, name, aliases)
+    where v_kind = 'pharmacy'
+
+    union all
+
+    select * from (values
+      ( 1, 'motor_oil',      'زيوت وسوائل المحرك',    array[]::text[]),
+      ( 2, 'oil_filter',     'فلاتر زيت وهواء ومكيف', array['فلاتر زيت وهواء']),
+      ( 3, 'brake_pads',     'فحمات وديسكات فرامل',   array[]::text[]),
+      ( 4, 'spark_plugs',    'بواجي وشمعات احتراق',   array[]::text[]),
+      ( 5, 'car_battery',    'بطاريات وكهرباء سيارات',array['بطاريات سيارات']),
+      ( 6, 'shock_absorber', 'مساعدات ونظام تعليق',   array['مساعدات وممتص صدمات']),
+      ( 7, 'tires',          'إطارات وجنوط',          array[]::text[]),
+      ( 8, 'headlight',      'أضواء وإنارة سيارات',   array[]::text[]),
+      ( 9, 'car_wipers',     'مساحات وزجاج',          array['مساحات زجاج']),
+      (10, 'car_accessories','إكسسوارات وعناية بالسيارة', array[]::text[])
+    ) as a(ord, image_key, name, aliases)
+    where v_kind = 'auto_parts'
+  ),
+  missing as (
+    select
+      c.image_key,
+      c.name,
+      row_number() over (order by c.ord) - 1 as idx
+    from catalog c
+    where not exists (
+      select 1
+      from public.store_categories existing
+      where existing.store_id = p_store_id
+        and (
+          existing.image_key = c.image_key
+          or public.normalize_arabic_category(existing.name) = public.normalize_arabic_category(c.name)
+          or public.normalize_arabic_category(existing.name) = any(
+            select public.normalize_arabic_category(al) from unnest(c.aliases) as al
+          )
+        )
+    )
+  )
+  insert into public.store_categories (store_id, name, image_key, position, is_hidden)
+  select p_store_id, m.name, m.image_key, v_base_pos + m.idx, false
+  from missing m
+  order by m.idx;
+end;
+$$;
+
+create or replace function public.on_store_created_seed_categories()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  perform public.seed_mandatory_categories_for_store(new.id, new.type, new.name);
+  return new;
+end;
+$$;
+
+drop trigger if exists stores_seed_mandatory_categories on public.stores;
+create trigger stores_seed_mandatory_categories
+  after insert on public.stores
+  for each row execute function public.on_store_created_seed_categories();
+
+do $$
+declare
+  r record;
+begin
+  for r in select id, type, name from public.stores loop
+    perform public.seed_mandatory_categories_for_store(r.id, r.type, r.name);
+  end loop;
+end;
+$$;
+
+-- ---------------------------------------------------------------------
 -- 2. جدول إعلانات الصفحة الرئيسية (Homepage Adverts)
 -- ---------------------------------------------------------------------
 
@@ -72,6 +417,8 @@ create table if not exists public.adverts (
 );
 
 alter table public.adverts enable row level security;
+grant select on table public.adverts to anon, authenticated;
+grant insert, update, delete on table public.adverts to authenticated;
 
 create index if not exists adverts_active_window_idx
   on public.adverts (active, starts_at, ends_at);

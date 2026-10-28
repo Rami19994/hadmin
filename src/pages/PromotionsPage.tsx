@@ -737,3 +737,4 @@ export function PromotionsPage({
     </div>
   );
 }
+

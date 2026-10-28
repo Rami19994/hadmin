@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ShieldCheck, LogOut, KeyRound, Copy, RefreshCw, UserPlus, LogIn } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
-import { supabase, SUPABASE_URL } from '../lib/supabase';
+import { supabase, SUPABASE_ACCOUNT_EMAIL, SUPABASE_URL } from '../lib/supabase';
 import type { Profile } from '../types/database';
 import { useToast } from './ToastContext';
 
@@ -146,7 +146,7 @@ export function AuthGate({
                 className="input"
                 dir="ltr"
                 required
-                placeholder="admin@example.com"
+                placeholder={SUPABASE_ACCOUNT_EMAIL}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -193,7 +193,7 @@ export function AuthGate({
               direction: 'ltr',
             }}
           >
-            <span>Supabase Connected</span>
+            <span>{SUPABASE_ACCOUNT_EMAIL}</span>
             <span>{SUPABASE_URL.replace('https://', '')}</span>
           </div>
         </div>
@@ -335,3 +335,4 @@ export function AuthGate({
 
   return <>{children}</>;
 }
+
