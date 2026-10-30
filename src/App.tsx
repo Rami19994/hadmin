@@ -4,6 +4,7 @@ import { supabase } from './lib/supabase';
 import type {
   AdminPageKey,
   AdvertRow,
+  AppGalleryItem,
   AppSettingsRow,
   AuthUserMeta,
   CartRow,
@@ -26,6 +27,7 @@ import { StoresPage } from './pages/StoresPage';
 import { SubscriptionsPage } from './pages/SubscriptionsPage';
 import { CategoriesPage } from './pages/CategoriesPage';
 import { ProductsPage } from './pages/ProductsPage';
+import { GalleryPage } from './pages/GalleryPage';
 import { PromotionsPage } from './pages/PromotionsPage';
 import { DailyOffersPage } from './pages/DailyOffersPage';
 import { OrdersPage } from './pages/OrdersPage';
@@ -59,6 +61,7 @@ export default function App() {
   const [favourites, setFavourites] = useState<FavouriteRow[]>([]);
   const [layouts, setLayouts] = useState<ShopperLayoutRow[]>([]);
   const [adverts, setAdverts] = useState<AdvertRow[]>([]);
+  const [galleryItems, setGalleryItems] = useState<AppGalleryItem[]>([]);
   const [appSettings, setAppSettings] = useState<AppSettingsRow | null>(null);
 
   const [advertsTableReady, setAdvertsTableReady] = useState(true);
@@ -114,6 +117,7 @@ export default function App() {
         favsRes,
         layoutsRes,
         advertsRes,
+        galleryRes,
         settingsRes,
       ] = await Promise.all([
         supabase.from('stores').select('*').order('created_at', { ascending: false }),
@@ -144,6 +148,7 @@ export default function App() {
         supabase.from('favourites').select('*').order('created_at', { ascending: false }),
         supabase.from('shopper_layouts').select('*').order('updated_at', { ascending: false }),
         supabase.from('adverts').select('*').order('position', { ascending: true }),
+        supabase.from('app_gallery').select('*').order('created_at', { ascending: false }),
         supabase.from('app_settings').select('*').limit(1).maybeSingle(),
       ]);
 
@@ -167,6 +172,7 @@ export default function App() {
       if (cartsRes.data) setCarts(cartsRes.data as CartRow[]);
       if (favsRes.data) setFavourites(favsRes.data as FavouriteRow[]);
       if (layoutsRes.data) setLayouts(layoutsRes.data as ShopperLayoutRow[]);
+      if (galleryRes.data) setGalleryItems(galleryRes.data as AppGalleryItem[]);
 
       if (!advertsRes.error && advertsRes.data) {
         setAdverts(advertsRes.data as AdvertRow[]);
@@ -199,8 +205,9 @@ export default function App() {
       totalStores: stores.length,
       totalProducts: products.length,
       totalUsers: profiles.length,
+      totalGalleryImages: galleryItems.length,
     }),
-    [stores, orders, creditAccounts, products, profiles]
+    [stores, orders, creditAccounts, products, profiles, galleryItems]
   );
 
   const productCountByStore = useMemo(() => {
@@ -315,6 +322,13 @@ export default function App() {
               categories={categories}
               stores={stores}
               selectedStoreId={selectedStoreId}
+              onReload={loadAllData}
+            />
+          )}
+
+          {activePage === 'gallery' && (
+            <GalleryPage
+              galleryItems={galleryItems}
               onReload={loadAllData}
             />
           )}

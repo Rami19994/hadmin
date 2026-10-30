@@ -4,6 +4,7 @@ export type AdminPageKey =
   | 'subscriptions'
   | 'categories'
   | 'products'
+  | 'gallery'
   | 'promotions'
   | 'daily_offers'
   | 'orders'
@@ -369,5 +370,17 @@ export interface AppSettingsRow {
   billing_instructions?: string | null;
   maintenance_mode?: boolean;
   announcement_banner?: string | null;
+  updated_at: string;
+}
+
+export interface AppGalleryItem {
+  id: string;
+  title: string;
+  category: string;
+  image_url: string;
+  image_key?: string | null;
+  position: number;
+  is_active: boolean;
+  created_at: string;
   updated_at: string;
 }

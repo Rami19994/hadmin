@@ -13,6 +13,7 @@ import {
   ShoppingBasket,
   Megaphone,
   Settings,
+  Images,
   LogOut,
   RefreshCw,
   Menu,
@@ -29,6 +30,7 @@ export interface NavCounts {
   totalStores: number;
   totalProducts: number;
   totalUsers: number;
+  totalGalleryImages?: number;
 }
 
 const NAV_GROUPS: {
@@ -77,6 +79,12 @@ const NAV_GROUPS: {
         title: 'المواد والبضائع والوحدات',
         icon: <Package size={17} />,
         badge: (c) => (c.totalProducts > 0 ? { value: c.totalProducts } : null),
+      },
+      {
+        key: 'gallery',
+        title: 'معرض صور التطبيق',
+        icon: <Images size={17} />,
+        badge: (c) => (c.totalGalleryImages ? { value: c.totalGalleryImages } : null),
       },
       {
         key: 'promotions',
@@ -157,6 +165,10 @@ export const PAGE_TITLES: Record<AdminPageKey, { title: string; subtitle: string
   products: {
     title: 'إدارة المواد والبضائع والوحدات المتعددة',
     subtitle: 'تحكم كامل بأسعار المواد، التوفر، المصدر، الوحدات الإضافية، والصور في جميع المتاجر',
+  },
+  gallery: {
+    title: 'معرض صور التطبيق للأقسام والمواد',
+    subtitle: 'إضافة ورفع صور المعرض من الجهاز لتظهر تلقائياً في أقسام ومواد التطبيق',
   },
   promotions: {
     title: 'إدارة العروض والتخفيضات',

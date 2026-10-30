@@ -1157,6 +1157,46 @@ create policy "admin: full adverts"
   with check ((select public.is_admin()));
 
 -- ---------------------------------------------------------------------
+-- 7b. جدول وسياسات معرض صور التطبيق (App Image Gallery)
+-- ---------------------------------------------------------------------
+
+create table if not exists public.app_gallery (
+  id           uuid primary key default gen_random_uuid(),
+  title        text not null,
+  category     text not null default 'عام',
+  image_url    text not null,
+  image_key    text,
+  position     integer not null default 0,
+  is_active    boolean not null default true,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+
+alter table public.app_gallery enable row level security;
+create index if not exists app_gallery_category_idx on public.app_gallery (category, position);
+create index if not exists app_gallery_active_idx on public.app_gallery (is_active, position);
+create index if not exists app_gallery_created_idx on public.app_gallery (created_at desc);
+
+drop trigger if exists app_gallery_touch on public.app_gallery;
+create trigger app_gallery_touch
+  before update on public.app_gallery
+  for each row execute function public.touch_updated_at();
+
+drop policy if exists "app_gallery: public reads active" on public.app_gallery;
+create policy "app_gallery: public reads active"
+  on public.app_gallery for select to anon, authenticated
+  using (is_active = true);
+
+drop policy if exists "admin: full app_gallery" on public.app_gallery;
+create policy "admin: full app_gallery"
+  on public.app_gallery for all to authenticated
+  using ((select public.is_admin()))
+  with check ((select public.is_admin()));
+
+grant select on public.app_gallery to anon, authenticated;
+grant insert, update, delete on public.app_gallery to authenticated;
+
+-- ---------------------------------------------------------------------
 -- 8. سياسات دلو التخزين `catalog` للمشرفين (رفع، تعديل، وحذف أي صورة)
 -- ---------------------------------------------------------------------
 

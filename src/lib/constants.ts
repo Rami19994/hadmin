@@ -453,6 +453,22 @@ export const PRODUCT_UNITS: string[] = [
   'طقم',
 ];
 
+export const DEFAULT_GALLERY_CATEGORIES: string[] = [
+  'خضار وفواكه',
+  'لحوم وألبان',
+  'مواد غذائية',
+  'معلبات وصلصات',
+  'مشروبات وعصائر',
+  'حلويات وشوكولا',
+  'مكسرات وبزورية',
+  'منظفات وعناية شخصية',
+  'أدوية وصيدلية',
+  'قطع غيار سيارات',
+  'أدوات منزلية ومستهلكات',
+  'مستلزمات أطفال',
+  'أخرى',
+];
+
 export const CATEGORY_ICON_KEYS: { key: string; label: string }[] = [
   { key: 'vegetables', label: 'خضار' },
   { key: 'fruits', label: 'فواكه' },

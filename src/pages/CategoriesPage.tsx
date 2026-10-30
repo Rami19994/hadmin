@@ -10,11 +10,13 @@ import {
   ArrowUp,
   ArrowDown,
   X,
+  Images,
 } from 'lucide-react';
 import type { StoreCategory, StoreRow } from '../types/database';
 import { CATEGORY_ICON_KEYS, formatDateTime } from '../lib/constants';
 import { supabase } from '../lib/supabase';
 import { ConfirmModal, ImageUploadField, useToast } from '../components/ToastContext';
+import { GalleryPickerModal } from '../components/GalleryPickerModal';
 
 interface CategoryFormState {
   id?: string;
@@ -45,6 +47,7 @@ export function CategoriesPage({
   const [visFilter, setVisFilter] = useState<'all' | 'visible' | 'hidden'>('all');
 
   const [editing, setEditing] = useState<CategoryFormState | null>(null);
+  const [showGalleryPicker, setShowGalleryPicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<StoreCategory | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -511,6 +514,16 @@ export function CategoriesPage({
                       onChange={(url) => setEditing({ ...editing, image_url: url })}
                       folderPath={`${editing.store_id || 'admin'}/sections`}
                     />
+                    <div style={{ marginTop: 6, display: 'flex', gap: 8 }}>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={() => setShowGalleryPicker(true)}
+                      >
+                        <Images size={14} />
+                        اختيار صورة من معرض صور التطبيق
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -539,6 +552,18 @@ export function CategoriesPage({
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
       />
+
+      {editing && (
+        <GalleryPickerModal
+          open={showGalleryPicker}
+          onClose={() => setShowGalleryPicker(false)}
+          initialCategory={editing.name || undefined}
+          onSelect={(url, title) => {
+            setEditing((prev) => (prev ? { ...prev, image_url: url } : prev));
+            notify(`تم اختيار صورة «${title}» من المعرض`);
+          }}
+        />
+      )}
     </div>
   );
 }

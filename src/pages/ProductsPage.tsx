@@ -9,6 +9,7 @@ import {
   XCircle,
   X,
   Layers,
+  Images,
 } from 'lucide-react';
 import type {
   ProductExtraUnit,
@@ -19,6 +20,7 @@ import type {
 import { formatMoney, PRODUCT_UNITS } from '../lib/constants';
 import { supabase } from '../lib/supabase';
 import { ConfirmModal, ImageUploadField, useToast } from '../components/ToastContext';
+import { GalleryPickerModal } from '../components/GalleryPickerModal';
 
 interface ProductFormState {
   id?: string;
@@ -58,6 +60,7 @@ export function ProductsPage({
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [editing, setEditing] = useState<ProductFormState | null>(null);
+  const [showGalleryPicker, setShowGalleryPicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ProductRow | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -676,6 +679,16 @@ export function ProductsPage({
                       onChange={(url) => setEditing({ ...editing, image_url: url })}
                       folderPath={`${editing.store_id || 'admin'}/goods`}
                     />
+                    <div style={{ marginTop: 6, display: 'flex', gap: 8 }}>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={() => setShowGalleryPicker(true)}
+                      >
+                        <Images size={14} />
+                        اختيار صورة من معرض صور التطبيق
+                      </button>
+                    </div>
                   </div>
 
                   {/* Extra Units Editor */}
@@ -813,6 +826,28 @@ export function ProductsPage({
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
       />
+
+      {editing && (
+        <GalleryPickerModal
+          open={showGalleryPicker}
+          onClose={() => setShowGalleryPicker(false)}
+          initialCategory={
+            categories.find((c) => c.id === editing.category_id)?.name || undefined
+          }
+          onSelect={(url, title) => {
+            setEditing((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    image_url: url,
+                    name: prev.name.trim() ? prev.name : title,
+                  }
+                : prev
+            );
+            notify(`تم اختيار صورة «${title}» من المعرض`);
+          }}
+        />
+      )}
     </div>
   );
 }
