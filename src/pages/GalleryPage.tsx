@@ -14,6 +14,7 @@ import {
   Check,
   Layers,
   Sparkles,
+  ShoppingCart,
 } from 'lucide-react';
 import type { AppGalleryItem } from '../types/database';
 import { DEFAULT_GALLERY_CATEGORIES, formatDateTime } from '../lib/constants';
@@ -115,12 +116,14 @@ export function GalleryPage({
       // strip extension and replace dashes/underscores with spaces
       const rawName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
       const cleanTitle = rawName.replace(/[-_]+/g, ' ').trim();
+      const finalTitle =
+        chosenCat === 'المشتريات اليومية' ? 'المشتريات اليومية' : cleanTitle;
 
       newItems.push({
         id: `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
         file,
         previewUrl: URL.createObjectURL(file),
-        title: cleanTitle,
+        title: finalTitle,
         category: chosenCat,
       });
     }
@@ -160,12 +163,17 @@ export function GalleryPage({
         // Upload image file to bucket 'catalog/app_gallery'
         const { publicUrl } = await uploadCatalogMedia(it.file, 'app_gallery');
 
+        const isDaily =
+          it.category.trim() === 'المشتريات اليومية' ||
+          it.title.trim() === 'المشتريات اليومية';
+
         // Insert row into public.app_gallery
         const { error } = await supabase.from('app_gallery').insert({
-          title: it.title.trim() || 'صورة مادة',
+          title: it.title.trim() || (isDaily ? 'المشتريات اليومية' : 'صورة مادة'),
           category: it.category.trim() || 'عام',
           image_url: publicUrl,
-          position: 0,
+          image_key: isDaily ? 'daily' : null,
+          position: isDaily ? -1 : 0,
           is_active: true,
         });
 
@@ -230,6 +238,9 @@ export function GalleryPage({
         ? editCustomCategory.trim() || 'عام'
         : editCategory.trim() || 'عام';
 
+    const isDaily =
+      finalCategory === 'المشتريات اليومية' || editTitle.trim() === 'المشتريات اليومية';
+
     setIsSavingEdit(true);
     try {
       const { error } = await supabase
@@ -237,6 +248,7 @@ export function GalleryPage({
         .update({
           title: editTitle.trim() || editingItem.title,
           category: finalCategory,
+          image_key: isDaily ? 'daily' : (editingItem.image_key === 'daily' ? null : editingItem.image_key),
           position: editPosition,
         })
         .eq('id', editingItem.id);
@@ -313,11 +325,27 @@ export function GalleryPage({
           </select>
         </div>
 
-        <div className="toolbar-actions">
+        <div className="toolbar-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="btn btn-yellow"
+            onClick={() => {
+              setDefaultUploadCategory('المشتريات اليومية');
+              setCustomUploadCategory('');
+              setPendingItems([]);
+              setIsUploadModalOpen(true);
+            }}
+          >
+            <ShoppingCart size={16} />
+            تعيين صورة «المشتريات اليومية»
+          </button>
+
           <button
             type="button"
             className="btn btn-primary"
             onClick={() => {
+              setDefaultUploadCategory('خضار وفواكه');
+              setCustomUploadCategory('');
               setPendingItems([]);
               setIsUploadModalOpen(true);
             }}
@@ -348,13 +376,26 @@ export function GalleryPage({
         </button>
         {allCategories.map((cat) => {
           const count = countsByCategory[cat] || 0;
+          const isDaily = cat === 'المشتريات اليومية';
           return (
             <button
               key={cat}
               type="button"
               className={`tab-pill ${selectedCategory === cat ? 'active' : ''}`}
+              style={
+                isDaily
+                  ? {
+                      borderColor: '#f59e0b',
+                      color: selectedCategory === cat ? '#fff' : '#b45309',
+                      fontWeight: 700,
+                    }
+                  : undefined
+              }
               onClick={() => setSelectedCategory(cat)}
             >
+              {isDaily && (
+                <ShoppingCart size={12} style={{ verticalAlign: 'middle', marginLeft: 4 }} />
+              )}
               {cat} ({count})
             </button>
           );
@@ -411,7 +452,12 @@ export function GalleryPage({
                 flexDirection: 'column',
                 borderRadius: 12,
                 opacity: item.is_active ? 1 : 0.6,
-                border: item.is_active ? '1px solid #e2e8f0' : '1px dashed #cbd5e1',
+                border:
+                  item.category === 'المشتريات اليومية' || item.image_key === 'daily'
+                    ? '2px solid #f59e0b'
+                    : item.is_active
+                    ? '1px solid #e2e8f0'
+                    : '1px dashed #cbd5e1',
                 background: item.is_active ? '#fff' : '#f8fafc',
                 transition: 'all 0.2s ease',
               }}
@@ -459,6 +505,33 @@ export function GalleryPage({
                 >
                   {item.is_active ? 'ظاهر' : 'مخفي'}
                 </div>
+
+                {/* Special Daily Badge */}
+                {(item.category === 'المشتريات اليومية' || item.image_key === 'daily') && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: 6,
+                      right: 6,
+                      left: 6,
+                      padding: '3px 6px',
+                      borderRadius: 6,
+                      fontSize: 10.5,
+                      fontWeight: 800,
+                      background: 'rgba(245, 158, 11, 0.95)',
+                      color: '#000',
+                      textAlign: 'center',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    <ShoppingCart size={12} />
+                    صورة المشتريات اليومية
+                  </div>
+                )}
               </div>
 
               {/* Title & Category Info */}
@@ -624,6 +697,29 @@ export function GalleryPage({
                     />
                   )}
                 </div>
+
+                {defaultUploadCategory === 'المشتريات اليومية' && (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      padding: '10px 14px',
+                      borderRadius: 8,
+                      background: '#fef3c7',
+                      border: '1px solid #f59e0b',
+                      color: '#92400e',
+                      fontSize: 13,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      fontWeight: 600,
+                    }}
+                  >
+                    <ShoppingCart size={18} />
+                    <div>
+                      <strong>تنبيه خاص بالمشتريات اليومية:</strong> الصورة المرفوعة هنا ستصبح الأيقونة/الصورة المعتمدة لخانة <strong>«المشتريات اليومية»</strong> المثبتة في أعلى شبكة أقسام المتجر في تطبيق الهاتف!
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Upload Dropzone */}
@@ -653,11 +749,14 @@ export function GalleryPage({
                       const file = files[i];
                       if (!file.type.startsWith('image/')) continue;
                       const rawName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+                      const cleanTitle = rawName.replace(/[-_]+/g, ' ').trim();
+                      const finalTitle =
+                        chosenCat === 'المشتريات اليومية' ? 'المشتريات اليومية' : cleanTitle;
                       newItems.push({
                         id: `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
                         file,
                         previewUrl: URL.createObjectURL(file),
-                        title: rawName.replace(/[-_]+/g, ' ').trim(),
+                        title: finalTitle,
                         category: chosenCat,
                       });
                     }

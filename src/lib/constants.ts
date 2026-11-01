@@ -454,6 +454,7 @@ export const PRODUCT_UNITS: string[] = [
 ];
 
 export const DEFAULT_GALLERY_CATEGORIES: string[] = [
+  'المشتريات اليومية',
   'خضار وفواكه',
   'لحوم وألبان',
   'مواد غذائية',
