@@ -15,6 +15,7 @@ import {
   Layers,
   Sparkles,
   ShoppingCart,
+  Package,
 } from 'lucide-react';
 import type { AppGalleryItem } from '../types/database';
 import { DEFAULT_GALLERY_CATEGORIES, formatDateTime } from '../lib/constants';
@@ -43,6 +44,7 @@ export function GalleryPage({
 
   // Modal states
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isProductUploadMode, setIsProductUploadMode] = useState(false);
   const [pendingItems, setPendingItems] = useState<PendingUploadItem[]>([]);
   const [defaultUploadCategory, setDefaultUploadCategory] = useState<string>('خضار وفواكه');
   const [customUploadCategory, setCustomUploadCategory] = useState<string>('');
@@ -328,11 +330,33 @@ export function GalleryPage({
         <div className="toolbar-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
             type="button"
+            className="btn btn-outline"
+            style={{
+              borderColor: '#0284c7',
+              color: '#0284c7',
+              fontWeight: 700,
+              background: '#f0f9ff',
+            }}
+            onClick={() => {
+              setDefaultUploadCategory('مواد غذائية');
+              setCustomUploadCategory('');
+              setPendingItems([]);
+              setIsProductUploadMode(true);
+              setIsUploadModalOpen(true);
+            }}
+          >
+            <Package size={16} />
+            إضافة صور للمواد
+          </button>
+
+          <button
+            type="button"
             className="btn btn-yellow"
             onClick={() => {
               setDefaultUploadCategory('المشتريات اليومية');
               setCustomUploadCategory('');
               setPendingItems([]);
+              setIsProductUploadMode(false);
               setIsUploadModalOpen(true);
             }}
           >
@@ -347,6 +371,7 @@ export function GalleryPage({
               setDefaultUploadCategory('خضار وفواكه');
               setCustomUploadCategory('');
               setPendingItems([]);
+              setIsProductUploadMode(false);
               setIsUploadModalOpen(true);
             }}
           >
@@ -641,8 +666,18 @@ export function GalleryPage({
           >
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Upload size={18} color="#16a34a" />
-                <h3 style={{ margin: 0 }}>إضافة صور إلى معرض صور التطبيق من الجهاز</h3>
+                {isProductUploadMode ? (
+                  <Package size={18} color="#0284c7" />
+                ) : (
+                  <Upload size={18} color="#16a34a" />
+                )}
+                <h3 style={{ margin: 0 }}>
+                  {isProductUploadMode
+                    ? 'إضافة ورفع صور للمواد والمنتجات من الجهاز'
+                    : (defaultUploadCategory === 'المشتريات اليومية'
+                      ? 'رفع وتعيين صورة «المشتريات اليومية»'
+                      : 'إضافة صور إلى معرض صور التطبيق من الجهاز')}
+                </h3>
               </div>
               <button
                 type="button"
@@ -655,6 +690,28 @@ export function GalleryPage({
             </div>
 
             <div className="modal-body">
+              {isProductUploadMode && (
+                <div
+                  style={{
+                    background: '#f0f9ff',
+                    border: '1px solid #bae6fd',
+                    borderRadius: 10,
+                    padding: '10px 14px',
+                    marginBottom: 14,
+                    color: '#0369a1',
+                    fontSize: 13,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    fontWeight: 600,
+                  }}
+                >
+                  <Package size={18} />
+                  <div>
+                    <strong>وضع رفع صور المواد:</strong> اختر صور المواد والسلع من جهازك، وسيتم حفظ أسمائها وأقسامها في المعرض لتظهر للتاجر والمستهلك عند استعراض المواد واختيار صورها.
+                  </div>
+                </div>
+              )}
               {/* Category Default Selection for new batch */}
               <div
                 style={{

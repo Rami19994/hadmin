@@ -37,6 +37,16 @@ interface ProductFormState {
   image_url: string;
   image_key: string;
   extra_units: ProductExtraUnit[];
+  classification?: string;
+  nutrition_per_100g?: string;
+  calories_per_100g?: string;
+  fiber_per_100g?: string;
+  vitamins_minerals?: string;
+  health_benefits?: string;
+  warnings?: string;
+  uses?: string;
+  origin?: string;
+  storage_method?: string;
 }
 
 export function ProductsPage({
@@ -119,6 +129,16 @@ export function ProductsPage({
       image_url: '',
       image_key: '',
       extra_units: [],
+      classification: '',
+      nutrition_per_100g: '',
+      calories_per_100g: '',
+      fiber_per_100g: '',
+      vitamins_minerals: '',
+      health_benefits: '',
+      warnings: '',
+      uses: '',
+      origin: '',
+      storage_method: '',
     });
   };
 
@@ -138,6 +158,16 @@ export function ProductsPage({
       image_url: p.image_url || '',
       image_key: p.image_key || '',
       extra_units: Array.isArray(p.extra_units) ? p.extra_units : [],
+      classification: p.classification || '',
+      nutrition_per_100g: p.nutrition_per_100g || '',
+      calories_per_100g: p.calories_per_100g || '',
+      fiber_per_100g: p.fiber_per_100g || '',
+      vitamins_minerals: p.vitamins_minerals || '',
+      health_benefits: p.health_benefits || '',
+      warnings: p.warnings || '',
+      uses: p.uses || '',
+      origin: p.origin || '',
+      storage_method: p.storage_method || '',
     });
   };
 
@@ -226,6 +256,16 @@ export function ProductsPage({
         image_url: editing.image_url.trim() || null,
         image_key: editing.image_key.trim() || null,
         extra_units: editing.extra_units.filter((u) => u.unit.trim() !== ''),
+        classification: editing.classification?.trim() || null,
+        nutrition_per_100g: editing.nutrition_per_100g?.trim() || null,
+        calories_per_100g: editing.calories_per_100g?.trim() || null,
+        fiber_per_100g: editing.fiber_per_100g?.trim() || null,
+        vitamins_minerals: editing.vitamins_minerals?.trim() || null,
+        health_benefits: editing.health_benefits?.trim() || null,
+        warnings: editing.warnings?.trim() || null,
+        uses: editing.uses?.trim() || null,
+        origin: editing.origin?.trim() || null,
+        storage_method: editing.storage_method?.trim() || null,
       };
 
       if (editing.id) {
@@ -239,6 +279,27 @@ export function ProductsPage({
         if (error) throw error;
       }
 
+      // حفظ تلقائي أو تحديث في موسوعة المواد لتعميم المعلومات
+      if (editing.name.trim()) {
+        try {
+          await supabase.from('product_knowledge').upsert({
+            name: editing.name.trim(),
+            name_en: editing.name_en.trim() || null,
+            classification: editing.classification?.trim() || null,
+            nutrition_per_100g: editing.nutrition_per_100g?.trim() || null,
+            calories_per_100g: editing.calories_per_100g?.trim() || null,
+            fiber_per_100g: editing.fiber_per_100g?.trim() || null,
+            vitamins_minerals: editing.vitamins_minerals?.trim() || null,
+            health_benefits: editing.health_benefits?.trim() || null,
+            warnings: editing.warnings?.trim() || null,
+            uses: editing.uses?.trim() || null,
+            origin: editing.origin?.trim() || null,
+            storage_method: editing.storage_method?.trim() || null,
+            image_url: editing.image_url.trim() || null,
+          }, { onConflict: 'name' });
+        } catch (_) {}
+      }
+
       notify(editing.id ? 'تم حفظ تعديلات المادة بنجاح' : 'تمت إضافة المادة بنجاح');
       setEditing(null);
       await onReload();
@@ -246,6 +307,69 @@ export function ProductsPage({
       notify(err instanceof Error ? err.message : 'فشل حفظ المادة', 'error');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleNameBlurOrChange = async (nameVal: string) => {
+    const clean = nameVal.trim();
+    if (!clean) return;
+    try {
+      const { data } = await supabase
+        .from('product_knowledge')
+        .select('*')
+        .ilike('name', clean)
+        .limit(1);
+
+      if (data && data.length > 0) {
+        const item = data[0];
+        setEditing((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            name_en: prev.name_en || item.name_en || '',
+            classification: item.classification || prev.classification || '',
+            nutrition_per_100g: item.nutrition_per_100g || prev.nutrition_per_100g || '',
+            calories_per_100g: item.calories_per_100g || prev.calories_per_100g || '',
+            fiber_per_100g: item.fiber_per_100g || prev.fiber_per_100g || '',
+            vitamins_minerals: item.vitamins_minerals || prev.vitamins_minerals || '',
+            health_benefits: item.health_benefits || prev.health_benefits || '',
+            warnings: item.warnings || prev.warnings || '',
+            uses: item.uses || prev.uses || '',
+            origin: item.origin || prev.origin || '',
+            storage_method: item.storage_method || prev.storage_method || '',
+            image_url: prev.image_url || item.image_url || '',
+          };
+        });
+        notify(`تم جلب معلومات «${item.name}» تلقائياً من بنك معلومات المواد!`);
+      }
+    } catch (_) {}
+  };
+
+  const handleSaveToKnowledge = async () => {
+    if (!editing || !editing.name.trim()) {
+      notify('يرجى كتابة اسم المادة أولاً لحفظها في الموسوعة', 'error');
+      return;
+    }
+    try {
+      const { error } = await supabase.from('product_knowledge').upsert({
+        name: editing.name.trim(),
+        name_en: editing.name_en.trim() || null,
+        classification: editing.classification?.trim() || null,
+        nutrition_per_100g: editing.nutrition_per_100g?.trim() || null,
+        calories_per_100g: editing.calories_per_100g?.trim() || null,
+        fiber_per_100g: editing.fiber_per_100g?.trim() || null,
+        vitamins_minerals: editing.vitamins_minerals?.trim() || null,
+        health_benefits: editing.health_benefits?.trim() || null,
+        warnings: editing.warnings?.trim() || null,
+        uses: editing.uses?.trim() || null,
+        origin: editing.origin?.trim() || null,
+        storage_method: editing.storage_method?.trim() || null,
+        image_url: editing.image_url.trim() || null,
+      }, { onConflict: 'name' });
+      if (error) throw error;
+      notify(`تم حفظ مادة «${editing.name}» في بنك معلومات وموسوعة المواد بنجاح`);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'فشل الحفظ في بنك المعلومات', 'error');
     }
   };
 
@@ -571,13 +695,32 @@ export function ProductsPage({
                   </div>
 
                   <div className="field">
-                    <label>اسم المادة (عربي) *</label>
+                    <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>اسم المادة (عربي) *</span>
+                      <button
+                        type="button"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#0284c7',
+                          fontSize: 12,
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                          padding: 0,
+                        }}
+                        onClick={() => handleNameBlurOrChange(editing.name)}
+                      >
+                        🔍 تعبئة من الموسوعة
+                      </button>
+                    </label>
                     <input
                       type="text"
                       className="input"
                       required
+                      placeholder="مثال: سلق، بندورة، تفاح..."
                       value={editing.name}
                       onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                      onBlur={(e) => handleNameBlurOrChange(e.target.value)}
                     />
                   </div>
 
@@ -798,6 +941,172 @@ export function ProductsPage({
                         </div>
                       ))
                     )}
+                  </div>
+
+                  {/* قسم موسوعة وبيانات المادة الغذائية والصحية (حسب جداول المنصة) */}
+                  <div
+                    className="col-span-2"
+                    style={{
+                      background: '#f8fafc',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 12,
+                      padding: 16,
+                      marginTop: 10,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: 10,
+                        marginBottom: 14,
+                        paddingBottom: 10,
+                        borderBottom: '1px solid #e2e8f0',
+                      }}
+                    >
+                      <div>
+                        <span style={{ fontWeight: 900, fontSize: 14.5, color: '#0f172a' }}>
+                          🥗 موسوعة وبيانات المادة الغذائية والصحية (حسب جداول المنصة)
+                        </span>
+                        <p style={{ margin: '3px 0 0', fontSize: 12, color: '#64748b' }}>
+                          تُملأ هذه الخانات تلقائياً بمجرد كتابة اسم المادة، ويمكنك حفظ وتعديل بياناتها في قاعدة البيانات.
+                        </p>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          onClick={() => handleNameBlurOrChange(editing.name)}
+                          title="استرجاع معلومات المادة من بنك المعلومات"
+                        >
+                          <Search size={14} /> بحث في الموسوعة
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          onClick={handleSaveToKnowledge}
+                          title="حفظ بيانات هذه المادة في الموسوعة للمستقبل"
+                        >
+                          <CheckCircle2 size={14} /> حفظ في بنك المعلومات
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+                      <div className="field">
+                        <label>التصنيف (ورقيات، خضار، فواكه، لحوم...)</label>
+                        <input
+                          type="text"
+                          className="input"
+                          placeholder="مثال: ورقيات"
+                          value={editing.classification || ''}
+                          onChange={(e) => setEditing({ ...editing, classification: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="field">
+                        <label>الموطن الأصلي</label>
+                        <input
+                          type="text"
+                          className="input"
+                          placeholder="مثال: منطقة البحر الأبيض المتوسط (صقلية)..."
+                          value={editing.origin || ''}
+                          onChange={(e) => setEditing({ ...editing, origin: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="field">
+                        <label>السعرات الحرارية: "لكل 100 غ"</label>
+                        <input
+                          type="text"
+                          className="input"
+                          placeholder="مثال: 19 سعرة حرارية لكل 100 غرام نيء..."
+                          value={editing.calories_per_100g || ''}
+                          onChange={(e) => setEditing({ ...editing, calories_per_100g: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="field">
+                        <label>يحتوي على: "لكل 100 غ."</label>
+                        <input
+                          type="text"
+                          className="input"
+                          placeholder="مثال: ماء 92.6 غرام، بروتين 1.8 غرام..."
+                          value={editing.nutrition_per_100g || ''}
+                          onChange={(e) => setEditing({ ...editing, nutrition_per_100g: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="field">
+                        <label>الألياف: "لكل 100 غ."</label>
+                        <input
+                          type="text"
+                          className="input"
+                          placeholder="مثال: 1.6 غرام لكل 100 غرام نيء..."
+                          value={editing.fiber_per_100g || ''}
+                          onChange={(e) => setEditing({ ...editing, fiber_per_100g: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="field">
+                        <label>الفيتامينات والمعادن: "لكل 100 غ."</label>
+                        <input
+                          type="text"
+                          className="input"
+                          placeholder="مثال: فيتامين K: 830 ميكروغرام، فيتامين A..."
+                          value={editing.vitamins_minerals || ''}
+                          onChange={(e) => setEditing({ ...editing, vitamins_minerals: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 }}>
+                      <div className="field">
+                        <label>الفوائد الصحية: "لكل 100 غ."</label>
+                        <textarea
+                          className="input"
+                          rows={3}
+                          placeholder="يقوي العظام، ينظم ضغط الدم، مضاد أكسدة، يحسن الهضم..."
+                          value={editing.health_benefits || ''}
+                          onChange={(e) => setEditing({ ...editing, health_benefits: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="field">
+                        <label>لا ينصح به لـ:</label>
+                        <textarea
+                          className="input"
+                          rows={3}
+                          placeholder="مرضى حصى الكلى، مرضى سيولة الدم..."
+                          value={editing.warnings || ''}
+                          onChange={(e) => setEditing({ ...editing, warnings: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="field">
+                        <label>الاستخدامات:</label>
+                        <textarea
+                          className="input"
+                          rows={3}
+                          placeholder="محاشي، سلطات، معجنات، مقلي مع البصل وزيت الزيتون..."
+                          value={editing.uses || ''}
+                          onChange={(e) => setEditing({ ...editing, uses: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="field">
+                        <label>طريقة الحفظ:</label>
+                        <textarea
+                          className="input"
+                          rows={3}
+                          placeholder="يحفظ في الثلاجة 4 إلى 5 أيام داخل كيس..."
+                          value={editing.storage_method || ''}
+                          onChange={(e) => setEditing({ ...editing, storage_method: e.target.value })}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

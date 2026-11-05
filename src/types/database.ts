@@ -165,6 +165,35 @@ export interface ProductRow {
   image_url: string | null;
   source: string | null;
   extra_units: ProductExtraUnit[];
+  classification?: string | null;
+  nutrition_per_100g?: string | null;
+  calories_per_100g?: string | null;
+  fiber_per_100g?: string | null;
+  vitamins_minerals?: string | null;
+  health_benefits?: string | null;
+  warnings?: string | null;
+  uses?: string | null;
+  origin?: string | null;
+  storage_method?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductKnowledgeRow {
+  id: string;
+  name: string;
+  name_en: string | null;
+  classification: string | null;
+  nutrition_per_100g: string | null;
+  calories_per_100g: string | null;
+  fiber_per_100g: string | null;
+  vitamins_minerals: string | null;
+  health_benefits: string | null;
+  warnings: string | null;
+  uses: string | null;
+  origin: string | null;
+  storage_method: string | null;
+  image_url: string | null;
   created_at: string;
   updated_at: string;
 }
