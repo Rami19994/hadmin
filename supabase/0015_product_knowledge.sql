@@ -101,3 +101,4 @@ insert into public.product_knowledge (
   uses = excluded.uses,
   origin = excluded.origin,
   storage_method = excluded.storage_method;
+

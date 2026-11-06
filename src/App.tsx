@@ -12,6 +12,7 @@ import type {
   DailyOfferRow,
   FavouriteRow,
   OrderRow,
+  ProductKnowledgeRow,
   ProductRow,
   Profile,
   PromotionRow,
@@ -62,6 +63,7 @@ export default function App() {
   const [layouts, setLayouts] = useState<ShopperLayoutRow[]>([]);
   const [adverts, setAdverts] = useState<AdvertRow[]>([]);
   const [galleryItems, setGalleryItems] = useState<AppGalleryItem[]>([]);
+  const [knowledgeItems, setKnowledgeItems] = useState<ProductKnowledgeRow[]>([]);
   const [appSettings, setAppSettings] = useState<AppSettingsRow | null>(null);
 
   const [advertsTableReady, setAdvertsTableReady] = useState(true);
@@ -118,6 +120,7 @@ export default function App() {
         layoutsRes,
         advertsRes,
         galleryRes,
+        knowledgeRes,
         settingsRes,
       ] = await Promise.all([
         supabase.from('stores').select('*').order('created_at', { ascending: false }),
@@ -149,6 +152,7 @@ export default function App() {
         supabase.from('shopper_layouts').select('*').order('updated_at', { ascending: false }),
         supabase.from('adverts').select('*').order('position', { ascending: true }),
         supabase.from('app_gallery').select('*').order('created_at', { ascending: false }),
+        supabase.from('product_knowledge').select('*').order('created_at', { ascending: false }),
         supabase.from('app_settings').select('*').limit(1).maybeSingle(),
       ]);
 
@@ -173,6 +177,7 @@ export default function App() {
       if (favsRes.data) setFavourites(favsRes.data as FavouriteRow[]);
       if (layoutsRes.data) setLayouts(layoutsRes.data as ShopperLayoutRow[]);
       if (galleryRes.data) setGalleryItems(galleryRes.data as AppGalleryItem[]);
+      if (knowledgeRes?.data) setKnowledgeItems(knowledgeRes.data as ProductKnowledgeRow[]);
 
       if (!advertsRes.error && advertsRes.data) {
         setAdverts(advertsRes.data as AdvertRow[]);
@@ -329,6 +334,10 @@ export default function App() {
           {activePage === 'gallery' && (
             <GalleryPage
               galleryItems={galleryItems}
+              categories={categories}
+              products={products}
+              stores={stores}
+              knowledgeItems={knowledgeItems}
               onReload={loadAllData}
             />
           )}

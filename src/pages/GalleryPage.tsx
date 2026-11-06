@@ -16,11 +16,50 @@ import {
   Sparkles,
   ShoppingCart,
   Package,
+  Store,
+  BookOpen,
+  Filter,
+  Maximize2,
+  ExternalLink,
+  RefreshCw,
+  Tag,
+  Info,
 } from 'lucide-react';
-import type { AppGalleryItem } from '../types/database';
+import type {
+  AppGalleryItem,
+  StoreCategory,
+  ProductRow,
+  StoreRow,
+  ProductKnowledgeRow,
+} from '../types/database';
 import { DEFAULT_GALLERY_CATEGORIES, formatDateTime } from '../lib/constants';
 import { supabase, uploadCatalogMedia } from '../lib/supabase';
 import { ConfirmModal, useToast } from '../components/ToastContext';
+
+export type ImageSourceFilter = 'all' | 'gallery' | 'categories' | 'products' | 'knowledge';
+
+export interface UnifiedImageItem {
+  id: string; // Unique key in list
+  source: 'gallery' | 'category' | 'product' | 'knowledge';
+  sourceLabel: string;
+  rawId: string;
+  title: string;
+  nameEn?: string | null;
+  category: string;
+  imageUrl: string;
+  imageKey?: string | null;
+  isActive: boolean; // Allowed/displayed in app & admin
+  storeId?: string | null;
+  storeName?: string | null;
+  price?: number | null;
+  unit?: string | null;
+  classification?: string | null;
+  origin?: string | null;
+  calories?: string | null;
+  healthBenefits?: string | null;
+  createdAt: string;
+  rawItem: AppGalleryItem | StoreCategory | ProductRow | ProductKnowledgeRow;
+}
 
 interface PendingUploadItem {
   id: string;
@@ -31,18 +70,258 @@ interface PendingUploadItem {
 }
 
 export function GalleryPage({
-  galleryItems,
+  galleryItems = [],
+  categories = [],
+  products = [],
+  stores = [],
+  knowledgeItems = [],
   onReload,
 }: {
   galleryItems: AppGalleryItem[];
+  categories?: StoreCategory[];
+  products?: ProductRow[];
+  stores?: StoreRow[];
+  knowledgeItems?: ProductKnowledgeRow[];
   onReload: () => Promise<void>;
 }) {
   const { notify } = useToast();
+
+  // Search & Filter state
   const [query, setQuery] = useState('');
+  const [sourceFilter, setSourceFilter] = useState<ImageSourceFilter>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedStoreId, setSelectedStoreId] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
-  // Modal states
+  // Stores lookup map
+  const storesMap = useMemo(() => {
+    const map = new Map<string, StoreRow>();
+    for (const s of stores) {
+      map.set(s.id, s);
+    }
+    return map;
+  }, [stores]);
+
+  // Categories lookup map for products
+  const categoriesMap = useMemo(() => {
+    const map = new Map<string, StoreCategory>();
+    for (const c of categories) {
+      map.set(c.id, c);
+    }
+    return map;
+  }, [categories]);
+
+  // Unify all images across the whole system
+  const allUnifiedItems: UnifiedImageItem[] = useMemo(() => {
+    const list: UnifiedImageItem[] = [];
+
+    // 1. App Gallery Items
+    for (const item of galleryItems) {
+      if (item.image_url && item.image_url.trim()) {
+        list.push({
+          id: `gallery-${item.id}`,
+          source: 'gallery',
+          sourceLabel: 'معرض التطبيق العام',
+          rawId: item.id,
+          title: item.title,
+          category: item.category?.trim() || 'عام',
+          imageUrl: item.image_url,
+          imageKey: item.image_key,
+          isActive: Boolean(item.is_active),
+          storeId: null,
+          storeName: 'معرض عام لجميع المتاجر',
+          createdAt: item.created_at,
+          rawItem: item,
+        });
+      }
+    }
+
+    // 2. Store Categories with images
+    for (const cat of categories) {
+      if (cat.image_url && cat.image_url.trim()) {
+        const store = cat.store_id ? storesMap.get(cat.store_id) : null;
+        const isHidden = Boolean(cat.is_hidden) || (cat.position >= 10000);
+        list.push({
+          id: `cat-${cat.id}`,
+          source: 'category',
+          sourceLabel: 'صور الأقسام',
+          rawId: cat.id,
+          title: cat.name,
+          category: cat.name, // Category itself
+          imageUrl: cat.image_url,
+          imageKey: cat.image_key,
+          isActive: !isHidden,
+          storeId: cat.store_id,
+          storeName: store ? store.name : 'متجر',
+          createdAt: cat.created_at,
+          rawItem: cat,
+        });
+      }
+    }
+
+    // 3. Products with images
+    for (const prod of products) {
+      if (prod.image_url && prod.image_url.trim()) {
+        const store = prod.store_id ? storesMap.get(prod.store_id) : null;
+        const cat = prod.category_id ? categoriesMap.get(prod.category_id) : null;
+        const categoryName = prod.classification?.trim() || cat?.name || 'مواد متنوعة';
+        list.push({
+          id: `prod-${prod.id}`,
+          source: 'product',
+          sourceLabel: 'صور المواد والمنتجات',
+          rawId: prod.id,
+          title: prod.name,
+          nameEn: prod.name_en,
+          category: categoryName,
+          imageUrl: prod.image_url,
+          imageKey: prod.image_key,
+          isActive: Boolean(prod.available),
+          storeId: prod.store_id,
+          storeName: store ? store.name : 'متجر',
+          price: prod.price,
+          unit: prod.unit,
+          classification: prod.classification,
+          origin: prod.origin,
+          calories: prod.calories_per_100g,
+          healthBenefits: prod.health_benefits,
+          createdAt: prod.created_at,
+          rawItem: prod,
+        });
+      }
+    }
+
+    // 4. Product Knowledge (Encyclopedia) with images
+    for (const kn of knowledgeItems) {
+      if (kn.image_url && kn.image_url.trim()) {
+        list.push({
+          id: `know-${kn.id}`,
+          source: 'knowledge',
+          sourceLabel: 'موسوعة المواد',
+          rawId: kn.id,
+          title: kn.name,
+          nameEn: kn.name_en,
+          category: kn.classification?.trim() || 'موسوعة المواد',
+          imageUrl: kn.image_url,
+          isActive: true,
+          storeId: null,
+          storeName: 'الموسوعة المركزية',
+          classification: kn.classification,
+          origin: kn.origin,
+          calories: kn.calories_per_100g,
+          healthBenefits: kn.health_benefits,
+          createdAt: kn.created_at,
+          rawItem: kn,
+        });
+      }
+    }
+
+    return list;
+  }, [galleryItems, categories, products, knowledgeItems, storesMap, categoriesMap]);
+
+  // Unique list of all categories across all unified items + standard presets
+  const availableCategories = useMemo(() => {
+    const set = new Set<string>();
+    // Add default presets
+    for (const def of DEFAULT_GALLERY_CATEGORIES) {
+      set.add(def);
+    }
+    // Add categories from unified items matching the current source filter
+    for (const item of allUnifiedItems) {
+      if (sourceFilter !== 'all') {
+        if (sourceFilter === 'gallery' && item.source !== 'gallery') continue;
+        if (sourceFilter === 'categories' && item.source !== 'category') continue;
+        if (sourceFilter === 'products' && item.source !== 'product') continue;
+        if (sourceFilter === 'knowledge' && item.source !== 'knowledge') continue;
+      }
+      if (item.category && item.category.trim()) {
+        set.add(item.category.trim());
+      }
+    }
+    return Array.from(set);
+  }, [allUnifiedItems, sourceFilter]);
+
+  // Counts by category (taking source filter into account)
+  const categoryCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const item of allUnifiedItems) {
+      if (sourceFilter !== 'all') {
+        if (sourceFilter === 'gallery' && item.source !== 'gallery') continue;
+        if (sourceFilter === 'categories' && item.source !== 'category') continue;
+        if (sourceFilter === 'products' && item.source !== 'product') continue;
+        if (sourceFilter === 'knowledge' && item.source !== 'knowledge') continue;
+      }
+      const cat = item.category || 'عام';
+      map[cat] = (map[cat] || 0) + 1;
+    }
+    return map;
+  }, [allUnifiedItems, sourceFilter]);
+
+  // Source item counts
+  const sourceCounts = useMemo(() => {
+    const counts = {
+      all: allUnifiedItems.length,
+      gallery: 0,
+      categories: 0,
+      products: 0,
+      knowledge: 0,
+    };
+    for (const item of allUnifiedItems) {
+      if (item.source === 'gallery') counts.gallery++;
+      else if (item.source === 'category') counts.categories++;
+      else if (item.source === 'product') counts.products++;
+      else if (item.source === 'knowledge') counts.knowledge++;
+    }
+    return counts;
+  }, [allUnifiedItems]);
+
+  // Filtered Unified Items
+  const filteredItems = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return allUnifiedItems
+      .filter((item) => {
+        // Source filter
+        if (sourceFilter === 'gallery' && item.source !== 'gallery') return false;
+        if (sourceFilter === 'categories' && item.source !== 'category') return false;
+        if (sourceFilter === 'products' && item.source !== 'product') return false;
+        if (sourceFilter === 'knowledge' && item.source !== 'knowledge') return false;
+
+        // Category filter
+        if (selectedCategory !== 'all' && item.category !== selectedCategory) return false;
+
+        // Store filter
+        if (selectedStoreId !== 'all' && item.storeId && item.storeId !== selectedStoreId) return false;
+
+        // Status filter
+        if (statusFilter === 'active' && !item.isActive) return false;
+        if (statusFilter === 'inactive' && item.isActive) return false;
+
+        // Search query
+        if (!q) return true;
+        return (
+          item.title.toLowerCase().includes(q) ||
+          (item.nameEn && item.nameEn.toLowerCase().includes(q)) ||
+          item.category.toLowerCase().includes(q) ||
+          (item.storeName && item.storeName.toLowerCase().includes(q)) ||
+          (item.classification && item.classification.toLowerCase().includes(q))
+        );
+      })
+      .sort((a, b) => {
+        // Sort Daily purchases first if viewing all
+        const isDailyA = a.category === 'المشتريات اليومية' || a.imageKey === 'daily';
+        const isDailyB = b.category === 'المشتريات اليومية' || b.imageKey === 'daily';
+        if (isDailyA && !isDailyB) return -1;
+        if (!isDailyA && isDailyB) return 1;
+
+        // Group by category, then title
+        if (a.category !== b.category) return a.category.localeCompare(b.category, 'ar');
+        return a.title.localeCompare(b.title, 'ar');
+      });
+  }, [allUnifiedItems, sourceFilter, selectedCategory, selectedStoreId, statusFilter, query]);
+
+  // Lightbox preview state
+  const [previewItem, setPreviewItem] = useState<UnifiedImageItem | null>(null);
+
+  // Upload modal states
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isProductUploadMode, setIsProductUploadMode] = useState(false);
   const [pendingItems, setPendingItems] = useState<PendingUploadItem[]>([]);
@@ -51,61 +330,286 @@ export function GalleryPage({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
 
-  // Edit single item state
-  const [editingItem, setEditingItem] = useState<AppGalleryItem | null>(null);
+  // Edit item state
+  const [editingItem, setEditingItem] = useState<UnifiedImageItem | null>(null);
   const [editTitle, setEditTitle] = useState('');
+  const [editNameEn, setEditNameEn] = useState('');
   const [editCategory, setEditCategory] = useState('');
   const [editCustomCategory, setEditCustomCategory] = useState('');
-  const [editPosition, setEditPosition] = useState(0);
+  const [editImageUrl, setEditImageUrl] = useState('');
+  const [editPrice, setEditPrice] = useState<number | ''>('');
+  const [editUnit, setEditUnit] = useState('');
+  const [editOrigin, setEditOrigin] = useState('');
+  const [editCalories, setEditCalories] = useState('');
+  const [editIsActive, setEditIsActive] = useState(true);
+  const [editImageFile, setEditImageFile] = useState<File | null>(null);
+  const [editImageFilePreview, setEditImageFilePreview] = useState<string>('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
-  // Delete state
-  const [deleteTarget, setDeleteTarget] = useState<AppGalleryItem | null>(null);
+  // Delete modal state
+  const [deleteTarget, setDeleteTarget] = useState<UnifiedImageItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Unique list of all categories present in the items + standard ones
-  const allCategories = useMemo(() => {
-    const set = new Set<string>(DEFAULT_GALLERY_CATEGORIES);
-    for (const item of galleryItems) {
-      if (item.category && item.category.trim()) {
-        set.add(item.category.trim());
+  // Promoting/publishing state
+  const [promotingId, setPromotingId] = useState<string | null>(null);
+
+  // Refreshing indicator
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await onReload();
+      notify('تم تحديث بيانات المعرض بنجاح');
+    } catch (err) {
+      notify('تعذر التحديث', 'error');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  // Toggle Visibility in App & Admin ("اسمح بعرضها بالادمن والتطبيق")
+  const handleToggleActive = async (item: UnifiedImageItem) => {
+    const nextState = !item.isActive;
+    try {
+      if (item.source === 'gallery') {
+        const { error } = await supabase
+          .from('app_gallery')
+          .update({ is_active: nextState })
+          .eq('id', item.rawId);
+        if (error) throw error;
+      } else if (item.source === 'category') {
+        // For category: is_hidden = !nextState
+        const { error } = await supabase
+          .from('store_categories')
+          .update({ is_hidden: !nextState })
+          .eq('id', item.rawId);
+        if (error) throw error;
+      } else if (item.source === 'product') {
+        // For product: available = nextState
+        const { error } = await supabase
+          .from('products')
+          .update({ available: nextState })
+          .eq('id', item.rawId);
+        if (error) throw error;
+      } else if (item.source === 'knowledge') {
+        notify('عناصر موسوعة المواد نشطة بشكل افتراضي');
+        return;
       }
-    }
-    return Array.from(set);
-  }, [galleryItems]);
 
-  // Counts by category
-  const countsByCategory = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const item of galleryItems) {
-      const cat = item.category || 'عام';
-      map[cat] = (map[cat] || 0) + 1;
+      notify(
+        nextState
+          ? `تم السماح بعرض «${item.title}» بنجاح`
+          : `تم إخفاء «${item.title}» من العرض`
+      );
+      await onReload();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'تعذر تغيير حالة العرض', 'error');
     }
-    return map;
-  }, [galleryItems]);
+  };
 
-  // Filtered items
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return galleryItems
-      .filter((item) => {
-        if (selectedCategory !== 'all' && item.category !== selectedCategory) return false;
-        if (statusFilter === 'active' && !item.is_active) return false;
-        if (statusFilter === 'inactive' && item.is_active) return false;
-        if (!q) return true;
-        return (
-          item.title.toLowerCase().includes(q) ||
-          item.category.toLowerCase().includes(q) ||
-          (item.image_key && item.image_key.toLowerCase().includes(q))
-        );
-      })
-      .sort((a, b) => {
-        if (a.category !== b.category) return a.category.localeCompare(b.category, 'ar');
-        return a.position - b.position;
+  // Publish / Promote item image to General App Gallery
+  const handlePublishToAppGallery = async (item: UnifiedImageItem) => {
+    if (item.source === 'gallery') {
+      notify('هذه الصورة موجودة بالفعل في المعرض العام');
+      return;
+    }
+    setPromotingId(item.id);
+    try {
+      const isDaily =
+        item.category === 'المشتريات اليومية' || item.title.trim() === 'المشتريات اليومية';
+
+      const { error } = await supabase.from('app_gallery').insert({
+        title: item.title,
+        category: item.category || 'عام',
+        image_url: item.imageUrl,
+        image_key: isDaily ? 'daily' : null,
+        position: isDaily ? -1 : 0,
+        is_active: true,
       });
-  }, [galleryItems, selectedCategory, statusFilter, query]);
 
-  // Handle files selected from device
+      if (error) throw error;
+      notify(`تم نشر صورة «${item.title}» وإتاحتها في معرض التطبيق العام بنجاح!`);
+      await onReload();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'فشل النشر إلى المعرض العام', 'error');
+    } finally {
+      setPromotingId(null);
+    }
+  };
+
+  // Start Edit
+  const startEdit = (item: UnifiedImageItem) => {
+    setEditingItem(item);
+    setEditTitle(item.title);
+    setEditNameEn(item.nameEn || '');
+    setEditImageUrl(item.imageUrl);
+    setEditPrice(item.price ?? '');
+    setEditUnit(item.unit || '');
+    setEditOrigin(item.origin || '');
+    setEditCalories(item.calories || '');
+    setEditIsActive(item.isActive);
+    setEditImageFile(null);
+    setEditImageFilePreview('');
+
+    if (DEFAULT_GALLERY_CATEGORIES.includes(item.category)) {
+      setEditCategory(item.category);
+      setEditCustomCategory('');
+    } else {
+      setEditCategory('__custom__');
+      setEditCustomCategory(item.category);
+    }
+  };
+
+  // Handle saving edit
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem) return;
+
+    const finalCategory =
+      editCategory === '__custom__'
+        ? editCustomCategory.trim() || 'عام'
+        : editCategory.trim() || 'عام';
+
+    setIsSavingEdit(true);
+    try {
+      let finalImageUrl = editImageUrl;
+
+      // If user uploaded a new image file from their device
+      if (editImageFile) {
+        const folder =
+          editingItem.source === 'category'
+            ? 'categories'
+            : editingItem.source === 'product'
+            ? 'products'
+            : 'app_gallery';
+        const { publicUrl } = await uploadCatalogMedia(editImageFile, folder);
+        finalImageUrl = publicUrl;
+      }
+
+      if (editingItem.source === 'gallery') {
+        const isDaily =
+          finalCategory === 'المشتريات اليومية' || editTitle.trim() === 'المشتريات اليومية';
+
+        const { error } = await supabase
+          .from('app_gallery')
+          .update({
+            title: editTitle.trim() || editingItem.title,
+            category: finalCategory,
+            image_url: finalImageUrl,
+            image_key: isDaily ? 'daily' : null,
+            is_active: editIsActive,
+          })
+          .eq('id', editingItem.rawId);
+
+        if (error) throw error;
+      } else if (editingItem.source === 'category') {
+        const { error } = await supabase
+          .from('store_categories')
+          .update({
+            name: editTitle.trim() || editingItem.title,
+            image_url: finalImageUrl,
+            is_hidden: !editIsActive,
+          })
+          .eq('id', editingItem.rawId);
+
+        if (error) throw error;
+      } else if (editingItem.source === 'product') {
+        const { error } = await supabase
+          .from('products')
+          .update({
+            name: editTitle.trim() || editingItem.title,
+            name_en: editNameEn.trim() || null,
+            image_url: finalImageUrl,
+            classification: finalCategory,
+            price: typeof editPrice === 'number' ? editPrice : Number(editPrice) || 0,
+            unit: editUnit.trim() || 'قطعة',
+            origin: editOrigin.trim() || null,
+            calories_per_100g: editCalories.trim() || null,
+            available: editIsActive,
+          })
+          .eq('id', editingItem.rawId);
+
+        if (error) throw error;
+      } else if (editingItem.source === 'knowledge') {
+        const { error } = await supabase
+          .from('product_knowledge')
+          .update({
+            name: editTitle.trim() || editingItem.title,
+            name_en: editNameEn.trim() || null,
+            image_url: finalImageUrl,
+            classification: finalCategory,
+            origin: editOrigin.trim() || null,
+            calories_per_100g: editCalories.trim() || null,
+          })
+          .eq('id', editingItem.rawId);
+
+        if (error) throw error;
+      }
+
+      notify(`تم حفظ تعديلات «${editTitle}» بنجاح`);
+      setEditingItem(null);
+      if (previewItem && previewItem.id === editingItem.id) {
+        setPreviewItem(null);
+      }
+      await onReload();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'فشل حفظ التعديلات', 'error');
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  // Handle Delete or Clear Image
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      if (deleteTarget.source === 'gallery') {
+        const { error } = await supabase
+          .from('app_gallery')
+          .delete()
+          .eq('id', deleteTarget.rawId);
+        if (error) throw error;
+        notify(`تم حذف صورة «${deleteTarget.title}» من المعرض العام`);
+      } else if (deleteTarget.source === 'category') {
+        // Clear image URL for category
+        const { error } = await supabase
+          .from('store_categories')
+          .update({ image_url: null, image_key: null })
+          .eq('id', deleteTarget.rawId);
+        if (error) throw error;
+        notify(`تم مسح صورة القسم «${deleteTarget.title}»`);
+      } else if (deleteTarget.source === 'product') {
+        // Clear image URL for product
+        const { error } = await supabase
+          .from('products')
+          .update({ image_url: null, image_key: null })
+          .eq('id', deleteTarget.rawId);
+        if (error) throw error;
+        notify(`تم مسح صورة المادة «${deleteTarget.title}»`);
+      } else if (deleteTarget.source === 'knowledge') {
+        const { error } = await supabase
+          .from('product_knowledge')
+          .update({ image_url: null })
+          .eq('id', deleteTarget.rawId);
+        if (error) throw error;
+        notify(`تم مسح صورة الموسوعة للمادة «${deleteTarget.title}»`);
+      }
+
+      if (previewItem && previewItem.id === deleteTarget.id) {
+        setPreviewItem(null);
+      }
+      setDeleteTarget(null);
+      await onReload();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'تعذر إتمام عملية الحذف', 'error');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Upload Batch Handler (Files from Device)
   const handleFilesPicked = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -115,7 +619,6 @@ export function GalleryPage({
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      // strip extension and replace dashes/underscores with spaces
       const rawName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
       const cleanTitle = rawName.replace(/[-_]+/g, ' ').trim();
       const finalTitle =
@@ -148,7 +651,6 @@ export function GalleryPage({
     );
   };
 
-  // Perform upload of pending items to Supabase Storage and Insert to DB
   const handleBatchUpload = async () => {
     if (pendingItems.length === 0) return;
     setIsUploading(true);
@@ -162,14 +664,11 @@ export function GalleryPage({
       setUploadProgress({ current: i + 1, total: pendingItems.length });
 
       try {
-        // Upload image file to bucket 'catalog/app_gallery'
         const { publicUrl } = await uploadCatalogMedia(it.file, 'app_gallery');
-
         const isDaily =
           it.category.trim() === 'المشتريات اليومية' ||
           it.title.trim() === 'المشتريات اليومية';
 
-        // Insert row into public.app_gallery
         const { error } = await supabase.from('app_gallery').insert({
           title: it.title.trim() || (isDaily ? 'المشتريات اليومية' : 'صورة مادة'),
           category: it.category.trim() || 'عام',
@@ -191,7 +690,7 @@ export function GalleryPage({
     setUploadProgress(null);
 
     if (successCount > 0) {
-      notify(`تم رفع وإضافة ${successCount} صورة بنجاح إلى معرض التطبيق`);
+      notify(`تم رفع وإضافة ${successCount} صورة بنجاح إلى المعرض`);
       setPendingItems([]);
       setIsUploadModalOpen(false);
       await onReload();
@@ -201,133 +700,229 @@ export function GalleryPage({
     }
   };
 
-  // Toggle active status
-  const handleToggleActive = async (item: AppGalleryItem) => {
-    const nextState = !item.is_active;
-    const { error } = await supabase
-      .from('app_gallery')
-      .update({ is_active: nextState })
-      .eq('id', item.id);
-
-    if (error) {
-      notify(error.message, 'error');
-      return;
-    }
-    notify(nextState ? `تم تفعيل ظهور صورة «${item.title}» في التطبيق` : `تم إخفاء صورة «${item.title}» من التطبيق`);
-    await onReload();
-  };
-
-  // Start edit item
-  const startEdit = (item: AppGalleryItem) => {
-    setEditingItem(item);
-    setEditTitle(item.title);
-    if (DEFAULT_GALLERY_CATEGORIES.includes(item.category)) {
-      setEditCategory(item.category);
-      setEditCustomCategory('');
-    } else {
-      setEditCategory('__custom__');
-      setEditCustomCategory(item.category);
-    }
-    setEditPosition(item.position || 0);
-  };
-
-  // Save edit item
-  const handleSaveEdit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingItem) return;
-    const finalCategory =
-      editCategory === '__custom__'
-        ? editCustomCategory.trim() || 'عام'
-        : editCategory.trim() || 'عام';
-
-    const isDaily =
-      finalCategory === 'المشتريات اليومية' || editTitle.trim() === 'المشتريات اليومية';
-
-    setIsSavingEdit(true);
-    try {
-      const { error } = await supabase
-        .from('app_gallery')
-        .update({
-          title: editTitle.trim() || editingItem.title,
-          category: finalCategory,
-          image_key: isDaily ? 'daily' : (editingItem.image_key === 'daily' ? null : editingItem.image_key),
-          position: editPosition,
-        })
-        .eq('id', editingItem.id);
-
-      if (error) throw error;
-      notify('تم حفظ التعديلات بنجاح');
-      setEditingItem(null);
-      await onReload();
-    } catch (err) {
-      notify(err instanceof Error ? err.message : 'فشل الحفظ', 'error');
-    } finally {
-      setIsSavingEdit(false);
-    }
-  };
-
-  // Delete item
-  const handleDelete = async () => {
-    if (!deleteTarget) return;
-    setIsDeleting(true);
-    try {
-      const { error } = await supabase
-        .from('app_gallery')
-        .delete()
-        .eq('id', deleteTarget.id);
-
-      if (error) throw error;
-      notify(`تم حذف صورة «${deleteTarget.title}» من معرض التطبيق`);
-      setDeleteTarget(null);
-      await onReload();
-    } catch (err) {
-      notify(err instanceof Error ? err.message : 'فشل الحذف', 'error');
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
   return (
-    <div>
-      {/* Top action toolbar */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Top Banner / Stats Header */}
+      <div
+        className="panel"
+        style={{
+          padding: '16px 20px',
+          background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+          color: '#fff',
+          borderRadius: 14,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 16,
+        }}
+      >
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                background: 'rgba(255,255,255,0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#38bdf8',
+              }}
+            >
+              <ImageIcon size={20} />
+            </div>
+            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#f8fafc' }}>
+              معرض الصور الشامل والتحكم بالبيانات
+            </h2>
+          </div>
+          <p style={{ margin: 0, fontSize: 13, color: '#94a3b8' }}>
+            استعراض وتحكم كامل بكافة صور التطبيق والأقسام والمواد والموسوعة، مع إمكانية الفرز حسب الفئة والسماح بالعرض وتعديل البيانات مباشرة.
+          </p>
+        </div>
+
+        {/* Global Stats Counter */}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <div
+            style={{
+              background: 'rgba(255,255,255,0.07)',
+              padding: '6px 14px',
+              borderRadius: 10,
+              textAlign: 'center',
+              border: '1px solid rgba(255,255,255,0.1)',
+            }}
+          >
+            <div style={{ fontSize: 11, color: '#94a3b8' }}>إجمالي الصور</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#38bdf8' }}>
+              {allUnifiedItems.length}
+            </div>
+          </div>
+          <div
+            style={{
+              background: 'rgba(255,255,255,0.07)',
+              padding: '6px 14px',
+              borderRadius: 10,
+              textAlign: 'center',
+              border: '1px solid rgba(255,255,255,0.1)',
+            }}
+          >
+            <div style={{ fontSize: 11, color: '#94a3b8' }}>صور الأقسام</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#34d399' }}>
+              {sourceCounts.categories}
+            </div>
+          </div>
+          <div
+            style={{
+              background: 'rgba(255,255,255,0.07)',
+              padding: '6px 14px',
+              borderRadius: 10,
+              textAlign: 'center',
+              border: '1px solid rgba(255,255,255,0.1)',
+            }}
+          >
+            <div style={{ fontSize: 11, color: '#94a3b8' }}>صور المواد</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#fbbf24' }}>
+              {sourceCounts.products}
+            </div>
+          </div>
+          <div
+            style={{
+              background: 'rgba(255,255,255,0.07)',
+              padding: '6px 14px',
+              borderRadius: 10,
+              textAlign: 'center',
+              border: '1px solid rgba(255,255,255,0.1)',
+            }}
+          >
+            <div style={{ fontSize: 11, color: '#94a3b8' }}>المعرض العام</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#c084fc' }}>
+              {sourceCounts.gallery}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Control Toolbar */}
       <div className="toolbar" style={{ flexWrap: 'wrap', gap: 12 }}>
-        <div className="toolbar-filters" style={{ flexWrap: 'wrap', gap: 10 }}>
-          <div className="search-box" style={{ minWidth: 260 }}>
+        <div className="toolbar-filters" style={{ flexWrap: 'wrap', gap: 10, flex: 1 }}>
+          {/* Search Box */}
+          <div className="search-box" style={{ minWidth: 240, flex: 1 }}>
             <Search size={16} className="search-box-icon" />
             <input
               type="text"
               className="input"
-              placeholder="بحث باسم الصورة أو القسم..."
+              placeholder="بحث باسم الصورة، القسم، المادة، أو المتجر..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 4,
+                  color: '#94a3b8',
+                }}
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
 
+          {/* Source Filter Select */}
+          <select
+            className="select"
+            value={sourceFilter}
+            onChange={(e) => {
+              setSourceFilter(e.target.value as ImageSourceFilter);
+              setSelectedCategory('all');
+            }}
+            style={{ minWidth: 160 }}
+          >
+            <option value="all">كل المصادر ({sourceCounts.all})</option>
+            <option value="gallery">معرض التطبيق العام ({sourceCounts.gallery})</option>
+            <option value="categories">صور الأقسام ({sourceCounts.categories})</option>
+            <option value="products">صور المواد والمنتجات ({sourceCounts.products})</option>
+            <option value="knowledge">موسوعة المواد ({sourceCounts.knowledge})</option>
+          </select>
+
+          {/* Category Dropdown */}
           <select
             className="select"
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
+            style={{ minWidth: 160 }}
           >
-            <option value="all">كل الأقسام ({galleryItems.length})</option>
-            {allCategories.map((cat) => (
+            <option value="all">كل الفئات والتصنيفات ({filteredItems.length})</option>
+            {availableCategories.map((cat) => (
               <option key={cat} value={cat}>
-                {cat} ({countsByCategory[cat] || 0})
+                {cat} ({categoryCounts[cat] || 0})
               </option>
             ))}
           </select>
 
+          {/* Stores Filter */}
+          {stores.length > 0 && (
+            <select
+              className="select"
+              value={selectedStoreId}
+              onChange={(e) => setSelectedStoreId(e.target.value)}
+              style={{ minWidth: 140 }}
+            >
+              <option value="all">جميع المتاجر</option>
+              {stores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {/* Status / Display Permission Filter */}
           <select
             className="select"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
+            style={{ minWidth: 140 }}
           >
-            <option value="all">كل الحالات</option>
-            <option value="active">الظاهرة في التطبيق فقط</option>
-            <option value="inactive">المخفية فقط</option>
+            <option value="all">كل حالات العرض</option>
+            <option value="active">مسموح بالعرض (ظاهر)</option>
+            <option value="inactive">مخفي / غير معروض</option>
           </select>
         </div>
 
+        {/* Action Buttons */}
         <div className="toolbar-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="btn btn-outline"
+            title="تحديث البيانات"
+            onClick={handleManualRefresh}
+            disabled={isRefreshing}
+          >
+            <RefreshCw size={15} className={isRefreshing ? 'spin' : ''} />
+            تحديث
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-yellow"
+            onClick={() => {
+              setDefaultUploadCategory('المشتريات اليومية');
+              setCustomUploadCategory('');
+              setPendingItems([]);
+              setIsProductUploadMode(false);
+              setIsUploadModalOpen(true);
+            }}
+          >
+            <ShoppingCart size={15} />
+            صورة المشتريات اليومية
+          </button>
+
           <button
             type="button"
             className="btn btn-outline"
@@ -345,23 +940,8 @@ export function GalleryPage({
               setIsUploadModalOpen(true);
             }}
           >
-            <Package size={16} />
+            <Package size={15} />
             إضافة صور للمواد
-          </button>
-
-          <button
-            type="button"
-            className="btn btn-yellow"
-            onClick={() => {
-              setDefaultUploadCategory('المشتريات اليومية');
-              setCustomUploadCategory('');
-              setPendingItems([]);
-              setIsProductUploadMode(false);
-              setIsUploadModalOpen(true);
-            }}
-          >
-            <ShoppingCart size={16} />
-            تعيين صورة «المشتريات اليومية»
           </button>
 
           <button
@@ -375,20 +955,83 @@ export function GalleryPage({
               setIsUploadModalOpen(true);
             }}
           >
-            <Upload size={16} />
-            إضافة صور للمعرض من الجهاز
+            <Upload size={15} />
+            رفع صور من الجهاز
           </button>
         </div>
       </div>
 
-      {/* Category Pills Bar */}
+      {/* Source Segmented Switcher */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 6,
+          background: '#f1f5f9',
+          padding: 4,
+          borderRadius: 10,
+          overflowX: 'auto',
+        }}
+      >
+        {[
+          { key: 'all', label: 'الكل', count: sourceCounts.all, icon: Layers },
+          { key: 'categories', label: 'صور الأقسام', count: sourceCounts.categories, icon: FolderPlus },
+          { key: 'products', label: 'صور المواد والمنتجات', count: sourceCounts.products, icon: Package },
+          { key: 'gallery', label: 'معرض التطبيق العام', count: sourceCounts.gallery, icon: ImageIcon },
+          { key: 'knowledge', label: 'موسوعة المواد', count: sourceCounts.knowledge, icon: BookOpen },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = sourceFilter === tab.key;
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => {
+                setSourceFilter(tab.key as ImageSourceFilter);
+                setSelectedCategory('all');
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 14px',
+                borderRadius: 8,
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: isActive ? 800 : 600,
+                fontSize: 13,
+                background: isActive ? '#fff' : 'transparent',
+                color: isActive ? '#0f172a' : '#64748b',
+                boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                transition: 'all 0.15s ease',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <Icon size={14} color={isActive ? '#0284c7' : '#64748b'} />
+              <span>{tab.label}</span>
+              <span
+                style={{
+                  fontSize: 11,
+                  padding: '1px 6px',
+                  borderRadius: 10,
+                  background: isActive ? '#e0f2fe' : '#e2e8f0',
+                  color: isActive ? '#0284c7' : '#64748b',
+                  fontWeight: 700,
+                }}
+              >
+                {tab.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Category Pills Bar ("حسب الفئة تبعها") */}
       <div
         style={{
           display: 'flex',
           gap: 8,
           overflowX: 'auto',
-          paddingBottom: 10,
-          marginBottom: 16,
+          paddingBottom: 6,
           scrollbarWidth: 'thin',
         }}
       >
@@ -397,22 +1040,26 @@ export function GalleryPage({
           className={`tab-pill ${selectedCategory === 'all' ? 'active' : ''}`}
           onClick={() => setSelectedCategory('all')}
         >
-          الكل ({galleryItems.length})
+          كل الفئات ({filteredItems.length})
         </button>
-        {allCategories.map((cat) => {
-          const count = countsByCategory[cat] || 0;
+
+        {availableCategories.map((cat) => {
+          const count = categoryCounts[cat] || 0;
           const isDaily = cat === 'المشتريات اليومية';
+          const isSelected = selectedCategory === cat;
+
           return (
             <button
               key={cat}
               type="button"
-              className={`tab-pill ${selectedCategory === cat ? 'active' : ''}`}
+              className={`tab-pill ${isSelected ? 'active' : ''}`}
               style={
                 isDaily
                   ? {
                       borderColor: '#f59e0b',
-                      color: selectedCategory === cat ? '#fff' : '#b45309',
-                      fontWeight: 700,
+                      color: isSelected ? '#fff' : '#b45309',
+                      fontWeight: 800,
+                      background: isSelected ? '#f59e0b' : '#fef3c7',
                     }
                   : undefined
               }
@@ -427,237 +1074,838 @@ export function GalleryPage({
         })}
       </div>
 
-      {/* Gallery Items Grid */}
-      {filtered.length === 0 ? (
+      {/* Main Images Grid */}
+      {filteredItems.length === 0 ? (
         <div
           className="panel"
           style={{
             textAlign: 'center',
-            padding: '50px 20px',
+            padding: '60px 20px',
             color: '#64748b',
+            borderRadius: 14,
           }}
         >
-          <ImageIcon size={48} style={{ margin: '0 auto 12px', opacity: 0.35 }} />
-          <h3 style={{ margin: '0 0 6px', color: '#1e293b' }}>
-            {galleryItems.length === 0
-              ? 'معرض صور التطبيق فارغ حالياً'
+          <ImageIcon size={52} style={{ margin: '0 auto 14px', opacity: 0.35 }} />
+          <h3 style={{ margin: '0 0 8px', color: '#1e293b' }}>
+            {allUnifiedItems.length === 0
+              ? 'لا توجد صور في النظام حالياً'
               : 'لا توجد صور مطابقة لمعايير البحث والتصفية'}
           </h3>
-          <p style={{ margin: '0 0 16px', fontSize: 13.5 }}>
-            {galleryItems.length === 0
-              ? 'يمكنك إضافة ورفع صور جديدة من جهازك لتظهر لجميع المتاجر في أقسام التطبيق.'
-              : 'جرّب تغيير عبارة البحث أو اختيار قسم آخر.'}
+          <p style={{ margin: '0 0 18px', fontSize: 13.5, maxWidth: 500, marginInline: 'auto' }}>
+            {allUnifiedItems.length === 0
+              ? 'يمكنك إضافة ورفع صور جديدة من جهازك للأقسام والمواد لتظهر في التطبيق فوراً.'
+              : 'جرّب إعادة تعيين الفلاتر أو البحث باسم مادة أو قسم آخر.'}
           </p>
-          {galleryItems.length === 0 && (
+
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+            {(selectedCategory !== 'all' || sourceFilter !== 'all' || query) && (
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => {
+                  setQuery('');
+                  setSelectedCategory('all');
+                  setSourceFilter('all');
+                  setStatusFilter('all');
+                  setSelectedStoreId('all');
+                }}
+              >
+                إعادة ضبط الفلاتر
+              </button>
+            )}
+
             <button
               type="button"
               className="btn btn-primary"
               onClick={() => setIsUploadModalOpen(true)}
             >
               <Upload size={16} />
-              رفع أول دفعة صور من الجهاز
+              رفع صور من الجهاز
             </button>
-          )}
+          </div>
         </div>
       ) : (
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
             gap: 16,
           }}
         >
-          {filtered.map((item) => (
-            <div
-              key={item.id}
-              className="panel"
-              style={{
-                padding: 10,
-                display: 'flex',
-                flexDirection: 'column',
-                borderRadius: 12,
-                opacity: item.is_active ? 1 : 0.6,
-                border:
-                  item.category === 'المشتريات اليومية' || item.image_key === 'daily'
+          {filteredItems.map((item) => {
+            const isDaily =
+              item.category === 'المشتريات اليومية' || item.imageKey === 'daily';
+
+            return (
+              <div
+                key={item.id}
+                className="panel"
+                style={{
+                  padding: 10,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  borderRadius: 14,
+                  opacity: item.isActive ? 1 : 0.65,
+                  border: isDaily
                     ? '2px solid #f59e0b'
-                    : item.is_active
+                    : item.isActive
                     ? '1px solid #e2e8f0'
                     : '1px dashed #cbd5e1',
-                background: item.is_active ? '#fff' : '#f8fafc',
-                transition: 'all 0.2s ease',
-              }}
-            >
-              {/* Image Preview Box */}
-              <div
-                style={{
-                  width: '100%',
-                  aspectRatio: '1',
-                  borderRadius: 8,
-                  overflow: 'hidden',
-                  background: '#f1f5f9',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  background: item.isActive ? '#fff' : '#f8fafc',
+                  transition: 'all 0.2s ease',
                   position: 'relative',
-                  border: '1px solid #e2e8f0',
                 }}
               >
-                <img
-                  src={item.image_url}
-                  alt={item.title}
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                  }}
-                  loading="lazy"
-                />
-
-                {/* Status Badge */}
+                {/* Image Container with Badges */}
                 <div
                   style={{
-                    position: 'absolute',
-                    top: 6,
-                    right: 6,
-                    padding: '2px 8px',
-                    borderRadius: 12,
-                    fontSize: 10.5,
-                    fontWeight: 700,
-                    background: item.is_active ? '#16a34a' : '#64748b',
-                    color: '#fff',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                    width: '100%',
+                    aspectRatio: '1',
+                    borderRadius: 10,
+                    overflow: 'hidden',
+                    background: '#f8fafc',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    position: 'relative',
+                    border: '1px solid #e2e8f0',
+                    cursor: 'pointer',
                   }}
+                  onClick={() => setPreviewItem(item)}
                 >
-                  {item.is_active ? 'ظاهر' : 'مخفي'}
-                </div>
+                  <img
+                    src={item.imageUrl}
+                    alt={item.title}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'contain',
+                      padding: 4,
+                      background: '#fff',
+                    }}
+                    loading="lazy"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src =
+                        'https://placehold.co/200x200?text=Image+Error';
+                    }}
+                  />
 
-                {/* Special Daily Badge */}
-                {(item.category === 'المشتريات اليومية' || item.image_key === 'daily') && (
+                  {/* Source Badge (Top Right) */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 6,
+                      right: 6,
+                      padding: '2px 7px',
+                      borderRadius: 6,
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      background:
+                        item.source === 'category'
+                          ? 'rgba(2, 132, 199, 0.95)'
+                          : item.source === 'product'
+                          ? 'rgba(16, 185, 129, 0.95)'
+                          : item.source === 'knowledge'
+                          ? 'rgba(217, 119, 6, 0.95)'
+                          : 'rgba(99, 102, 241, 0.95)',
+                      color: '#fff',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                    }}
+                  >
+                    {item.source === 'category' && 'قسم'}
+                    {item.source === 'product' && 'مادة'}
+                    {item.source === 'knowledge' && 'موسوعة'}
+                    {item.source === 'gallery' && 'معرض'}
+                  </div>
+
+                  {/* Display Status Switch Pill (Top Left - "اسمح بعرضها بالادمن") */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleActive(item);
+                    }}
+                    title={item.isActive ? 'مسموح بالعرض (اضغط للإخفاء)' : 'مخفي (اضغط للسماح بالعرض)'}
+                    style={{
+                      position: 'absolute',
+                      top: 6,
+                      left: 6,
+                      padding: '2px 8px',
+                      borderRadius: 12,
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      background: item.isActive ? '#16a34a' : '#64748b',
+                      color: '#fff',
+                      border: 'none',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                    }}
+                  >
+                    {item.isActive ? <Eye size={11} /> : <EyeOff size={11} />}
+                    {item.isActive ? 'مسموح بالعرض' : 'مخفي'}
+                  </button>
+
+                  {/* Daily Purchases Badge */}
+                  {isDaily && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        bottom: 6,
+                        right: 6,
+                        left: 6,
+                        padding: '3px 6px',
+                        borderRadius: 6,
+                        fontSize: 10.5,
+                        fontWeight: 800,
+                        background: 'rgba(245, 158, 11, 0.95)',
+                        color: '#000',
+                        textAlign: 'center',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 4,
+                      }}
+                    >
+                      <ShoppingCart size={12} />
+                      صورة المشتريات اليومية
+                    </div>
+                  )}
+
+                  {/* Expand Preview Hover Icon */}
                   <div
                     style={{
                       position: 'absolute',
                       bottom: 6,
                       right: 6,
-                      left: 6,
-                      padding: '3px 6px',
-                      borderRadius: 6,
-                      fontSize: 10.5,
-                      fontWeight: 800,
-                      background: 'rgba(245, 158, 11, 0.95)',
-                      color: '#000',
-                      textAlign: 'center',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                      display: 'flex',
+                      background: 'rgba(0,0,0,0.5)',
+                      color: '#fff',
+                      borderRadius: 4,
+                      padding: 3,
+                      display: isDaily ? 'none' : 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: 4,
                     }}
+                    title="تكبير ومعاينة التفاصيل"
                   >
-                    <ShoppingCart size={12} />
-                    صورة المشتريات اليومية
+                    <Maximize2 size={12} />
                   </div>
-                )}
-              </div>
-
-              {/* Title & Category Info */}
-              <div style={{ marginTop: 10, flex: 1 }}>
-                <div
-                  style={{
-                    fontWeight: 700,
-                    fontSize: 14,
-                    color: '#0f172a',
-                    marginBottom: 4,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                  title={item.title}
-                >
-                  {item.title}
                 </div>
+
+                {/* Card Title & Info */}
+                <div style={{ marginTop: 8, flex: 1, minHeight: 60 }}>
+                  <div
+                    style={{
+                      fontWeight: 800,
+                      fontSize: 13.5,
+                      color: '#0f172a',
+                      marginBottom: 3,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                    title={item.title}
+                  >
+                    {item.title}
+                  </div>
+
+                  {item.nameEn && (
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: '#64748b',
+                        marginBottom: 4,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {item.nameEn}
+                    </div>
+                  )}
+
+                  {/* Category Pill */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 3,
+                        background: '#eff6ff',
+                        color: '#1d4ed8',
+                        padding: '2px 7px',
+                        borderRadius: 6,
+                        fontSize: 11,
+                        fontWeight: 600,
+                      }}
+                    >
+                      <Tag size={10} />
+                      {item.category}
+                    </span>
+
+                    {/* Price if available */}
+                    {typeof item.price === 'number' && (
+                      <span
+                        style={{
+                          background: '#ecfdf5',
+                          color: '#047857',
+                          padding: '2px 7px',
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 700,
+                        }}
+                      >
+                        {item.price} ل.س
+                      </span>
+                    )}
+
+                    {/* Store Name if applicable */}
+                    {item.storeName && item.source !== 'gallery' && item.source !== 'knowledge' && (
+                      <span
+                        style={{
+                          background: '#f8fafc',
+                          color: '#64748b',
+                          padding: '1px 6px',
+                          borderRadius: 4,
+                          fontSize: 10.5,
+                          border: '1px solid #e2e8f0',
+                        }}
+                      >
+                        {item.storeName}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Card Actions Footer */}
                 <div
                   style={{
-                    display: 'inline-flex',
+                    marginTop: 10,
+                    paddingTop: 8,
+                    borderTop: '1px solid #f1f5f9',
+                    display: 'flex',
+                    justifyContent: 'space-between',
                     alignItems: 'center',
                     gap: 4,
-                    background: '#eff6ff',
-                    color: '#1d4ed8',
-                    padding: '2px 8px',
-                    borderRadius: 6,
-                    fontSize: 11.5,
-                    fontWeight: 600,
                   }}
                 >
-                  <Layers size={11} />
-                  {item.category}
+                  {/* Toggle Visibility */}
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    style={{ padding: '4px 6px' }}
+                    title={item.isActive ? 'إخفاء من التطبيق' : 'السماح بالعرض في التطبيق'}
+                    onClick={() => handleToggleActive(item)}
+                  >
+                    {item.isActive ? <EyeOff size={13} /> : <Eye size={13} />}
+                  </button>
+
+                  {/* Promote to App Gallery (if not already in gallery) */}
+                  {item.source !== 'gallery' && (
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      style={{ padding: '4px 6px', color: '#7c3aed', borderColor: '#ddd6fe' }}
+                      title="نشر وإتاحة بالمعرض العام لجميع المتاجر"
+                      disabled={promotingId === item.id}
+                      onClick={() => handlePublishToAppGallery(item)}
+                    >
+                      <Sparkles size={13} />
+                    </button>
+                  )}
+
+                  {/* Copy Image URL */}
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    style={{ padding: '4px 6px' }}
+                    title="نسخ رابط الصورة"
+                    onClick={() => {
+                      navigator.clipboard.writeText(item.imageUrl);
+                      notify('تم نسخ رابط الصورة إلى الحافظة');
+                    }}
+                  >
+                    <Copy size={13} />
+                  </button>
+
+                  {/* Edit Item Data & Image */}
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    style={{ padding: '4px 6px' }}
+                    title="تعديل البيانات والصورة"
+                    onClick={() => startEdit(item)}
+                  >
+                    <Edit3 size={13} />
+                  </button>
+
+                  {/* Delete / Clear */}
+                  <button
+                    type="button"
+                    className="btn btn-danger btn-sm"
+                    style={{ padding: '4px 6px' }}
+                    title={item.source === 'gallery' ? 'حذف من المعرض' : 'إزالة الصورة'}
+                    onClick={() => setDeleteTarget(item)}
+                  >
+                    <Trash2 size={13} />
+                  </button>
                 </div>
               </div>
-
-              {/* Actions Footer */}
-              <div
-                style={{
-                  marginTop: 12,
-                  paddingTop: 8,
-                  borderTop: '1px solid #f1f5f9',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: 4,
-                }}
-              >
-                <button
-                  type="button"
-                  className="btn btn-outline btn-sm"
-                  style={{ padding: '4px 6px' }}
-                  title={item.is_active ? 'إخفاء من التطبيق' : 'إظهار في التطبيق'}
-                  onClick={() => handleToggleActive(item)}
-                >
-                  {item.is_active ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
-
-                <button
-                  type="button"
-                  className="btn btn-outline btn-sm"
-                  style={{ padding: '4px 6px' }}
-                  title="نسخ رابط الصورة"
-                  onClick={() => {
-                    navigator.clipboard.writeText(item.image_url);
-                    notify('تم نسخ رابط الصورة إلى الحافظة');
-                  }}
-                >
-                  <Copy size={14} />
-                </button>
-
-                <button
-                  type="button"
-                  className="btn btn-outline btn-sm"
-                  style={{ padding: '4px 6px' }}
-                  title="تعديل الاسم أو القسم"
-                  onClick={() => startEdit(item)}
-                >
-                  <Edit3 size={14} />
-                </button>
-
-                <button
-                  type="button"
-                  className="btn btn-danger btn-sm"
-                  style={{ padding: '4px 6px' }}
-                  title="حذف من المعرض"
-                  onClick={() => setDeleteTarget(item)}
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      {/* Upload Modal (من الجهاز) */}
+      {/* Lightbox / Fullscreen Preview Modal */}
+      {previewItem && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setPreviewItem(null)}
+          style={{ zIndex: 1200 }}
+        >
+          <div
+            className="modal-panel"
+            style={{ maxWidth: 640 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <ImageIcon size={18} color="#0284c7" />
+                <h3 style={{ margin: 0 }}>تفاصيل ومعاينة الصورة</h3>
+              </div>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => setPreviewItem(null)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {/* Full Image Preview */}
+              <div
+                style={{
+                  width: '100%',
+                  maxHeight: 340,
+                  borderRadius: 12,
+                  overflow: 'hidden',
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: 16,
+                }}
+              >
+                <img
+                  src={previewItem.imageUrl}
+                  alt={previewItem.title}
+                  style={{
+                    maxWidth: '100%',
+                    maxHeight: 340,
+                    objectFit: 'contain',
+                    padding: 8,
+                  }}
+                />
+              </div>
+
+              {/* Data Table */}
+              <div
+                style={{
+                  background: '#f8fafc',
+                  borderRadius: 10,
+                  padding: 12,
+                  border: '1px solid #e2e8f0',
+                  fontSize: 13,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#64748b' }}>الاسم:</span>
+                  <span style={{ fontWeight: 800, color: '#0f172a' }}>{previewItem.title}</span>
+                </div>
+
+                {previewItem.nameEn && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b' }}>الاسم بالإنجليزية:</span>
+                    <span style={{ fontWeight: 600 }}>{previewItem.nameEn}</span>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#64748b' }}>المصدر:</span>
+                  <span style={{ fontWeight: 700, color: '#0284c7' }}>
+                    {previewItem.sourceLabel}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#64748b' }}>الفئة / القسم:</span>
+                  <span style={{ fontWeight: 700 }}>{previewItem.category}</span>
+                </div>
+
+                {previewItem.storeName && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b' }}>المتجر:</span>
+                    <span>{previewItem.storeName}</span>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#64748b' }}>حالة العرض:</span>
+                  <span
+                    style={{
+                      fontWeight: 700,
+                      color: previewItem.isActive ? '#16a34a' : '#dc2626',
+                    }}
+                  >
+                    {previewItem.isActive ? 'مسموح بالعرض (ظاهر في التطبيق)' : 'مخفي / غير معروض'}
+                  </span>
+                </div>
+
+                {typeof previewItem.price === 'number' && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b' }}>السعر:</span>
+                    <span style={{ fontWeight: 700 }}>
+                      {previewItem.price} ل.س ({previewItem.unit || 'قطعة'})
+                    </span>
+                  </div>
+                )}
+
+                {previewItem.origin && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b' }}>بلد المنشأ:</span>
+                    <span>{previewItem.origin}</span>
+                  </div>
+                )}
+
+                {previewItem.calories && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b' }}>السعرات الحرارية:</span>
+                    <span>{previewItem.calories}</span>
+                  </div>
+                )}
+
+                {previewItem.healthBenefits && (
+                  <div>
+                    <span style={{ color: '#64748b', display: 'block', marginBottom: 2 }}>
+                      الفوائد الصحية:
+                    </span>
+                    <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.5 }}>
+                      {previewItem.healthBenefits}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(previewItem.imageUrl);
+                    notify('تم نسخ رابط الصورة');
+                  }}
+                >
+                  <Copy size={14} />
+                  نسخ الرابط
+                </button>
+                <a
+                  href={previewItem.imageUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-outline btn-sm"
+                >
+                  <ExternalLink size={14} />
+                  فتح بحجم كامل
+                </a>
+              </div>
+
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  onClick={() => {
+                    const item = previewItem;
+                    setPreviewItem(null);
+                    startEdit(item);
+                  }}
+                >
+                  <Edit3 size={14} />
+                  تعديل البيانات
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => {
+                    handleToggleActive(previewItem);
+                    setPreviewItem(null);
+                  }}
+                >
+                  {previewItem.isActive ? <EyeOff size={14} /> : <Eye size={14} />}
+                  {previewItem.isActive ? 'إخفاء الصورة' : 'السماح بالعرض'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal (مع إمكانية تعديل البيانات وتغيير الصورة من الجهاز) */}
+      {editingItem && (
+        <div
+          className="modal-backdrop"
+          onClick={() => !isSavingEdit && setEditingItem(null)}
+          style={{ zIndex: 1200 }}
+        >
+          <div
+            className="modal-panel"
+            style={{ maxWidth: 540 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Edit3 size={18} color="#0284c7" />
+                <h3 style={{ margin: 0 }}>تعديل بيانات وصورة ({editingItem.sourceLabel})</h3>
+              </div>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                disabled={isSavingEdit}
+                onClick={() => setEditingItem(null)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit}>
+              <div className="modal-body">
+                {/* Current vs New Image Preview */}
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    marginBottom: 16,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 140,
+                      height: 140,
+                      borderRadius: 12,
+                      overflow: 'hidden',
+                      background: '#f8fafc',
+                      border: '2px solid #cbd5e1',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      position: 'relative',
+                    }}
+                  >
+                    <img
+                      src={editImageFilePreview || editImageUrl}
+                      alt="preview"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'contain',
+                        padding: 4,
+                      }}
+                    />
+                  </div>
+
+                  {/* Change Image Button */}
+                  <label
+                    className="btn btn-outline btn-sm"
+                    style={{ marginTop: 8, cursor: 'pointer' }}
+                  >
+                    <Upload size={14} />
+                    اختيار صورة بديلة من الجهاز
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      disabled={isSavingEdit}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setEditImageFile(file);
+                          setEditImageFilePreview(URL.createObjectURL(file));
+                        }
+                      }}
+                    />
+                  </label>
+                  {editImageFile && (
+                    <span style={{ fontSize: 11, color: '#16a34a', marginTop: 4, fontWeight: 700 }}>
+                      ✓ تم اختيار ملف جديد: {editImageFile.name}
+                    </span>
+                  )}
+                </div>
+
+                <div className="form-grid">
+                  {/* Title / Name */}
+                  <div className="col-span-2 field">
+                    <label>الاسم / العنوان *</label>
+                    <input
+                      type="text"
+                      className="input"
+                      required
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                    />
+                  </div>
+
+                  {/* English Name (for products / knowledge) */}
+                  {(editingItem.source === 'product' || editingItem.source === 'knowledge') && (
+                    <div className="col-span-2 field">
+                      <label>الاسم بالإنجليزية (اختياري)</label>
+                      <input
+                        type="text"
+                        className="input"
+                        placeholder="e.g. Tomato"
+                        value={editNameEn}
+                        onChange={(e) => setEditNameEn(e.target.value)}
+                      />
+                    </div>
+                  )}
+
+                  {/* Category Selection */}
+                  <div className="col-span-2 field">
+                    <label>القسم / الفئة / التصنيف *</label>
+                    <select
+                      className="select"
+                      value={editCategory}
+                      onChange={(e) => setEditCategory(e.target.value)}
+                    >
+                      {DEFAULT_GALLERY_CATEGORIES.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                      <option value="__custom__">+ تصنيف مخصص آخر...</option>
+                    </select>
+                  </div>
+
+                  {editCategory === '__custom__' && (
+                    <div className="col-span-2 field">
+                      <label>اسم التصنيف المخصص</label>
+                      <input
+                        type="text"
+                        className="input"
+                        placeholder="مثال: لحوم مجمدة"
+                        value={editCustomCategory}
+                        onChange={(e) => setEditCustomCategory(e.target.value)}
+                      />
+                    </div>
+                  )}
+
+                  {/* Product-specific fields */}
+                  {editingItem.source === 'product' && (
+                    <>
+                      <div className="field">
+                        <label>السعر (ل.س)</label>
+                        <input
+                          type="number"
+                          className="input"
+                          value={editPrice}
+                          onChange={(e) =>
+                            setEditPrice(e.target.value === '' ? '' : Number(e.target.value))
+                          }
+                        />
+                      </div>
+                      <div className="field">
+                        <label>الوحدة (كغ، قطعة، عبوة...)</label>
+                        <input
+                          type="text"
+                          className="input"
+                          value={editUnit}
+                          onChange={(e) => setEditUnit(e.target.value)}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Knowledge/Product fields */}
+                  {(editingItem.source === 'product' || editingItem.source === 'knowledge') && (
+                    <>
+                      <div className="field">
+                        <label>بلد المنشأ</label>
+                        <input
+                          type="text"
+                          className="input"
+                          value={editOrigin}
+                          onChange={(e) => setEditOrigin(e.target.value)}
+                        />
+                      </div>
+                      <div className="field">
+                        <label>السعرات الحرارية لكل 100غ</label>
+                        <input
+                          type="text"
+                          className="input"
+                          value={editCalories}
+                          onChange={(e) => setEditCalories(e.target.value)}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Display Permission Toggle */}
+                  <div className="col-span-2 field" style={{ marginTop: 8 }}>
+                    <label
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={editIsActive}
+                        onChange={(e) => setEditIsActive(e.target.checked)}
+                        style={{ width: 18, height: 18, cursor: 'pointer' }}
+                      />
+                      <span>السماح بالعرض في لوحة الأدمن وتطبيق الهاتف (نشط / ظاهر)</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  disabled={isSavingEdit}
+                  onClick={() => setEditingItem(null)}
+                >
+                  إلغاء
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={isSavingEdit}>
+                  {isSavingEdit ? 'جاري الحفظ...' : 'حفظ التعديلات'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Batch Modal (من الجهاز) */}
       {isUploadModalOpen && (
         <div
           className="modal-backdrop"
           onClick={() => !isUploading && setIsUploadModalOpen(false)}
+          style={{ zIndex: 1200 }}
         >
           <div
             className="modal-panel"
@@ -674,9 +1922,9 @@ export function GalleryPage({
                 <h3 style={{ margin: 0 }}>
                   {isProductUploadMode
                     ? 'إضافة ورفع صور للمواد والمنتجات من الجهاز'
-                    : (defaultUploadCategory === 'المشتريات اليومية'
-                      ? 'رفع وتعيين صورة «المشتريات اليومية»'
-                      : 'إضافة صور إلى معرض صور التطبيق من الجهاز')}
+                    : defaultUploadCategory === 'المشتريات اليومية'
+                    ? 'رفع وتعيين صورة «المشتريات اليومية»'
+                    : 'إضافة صور إلى معرض صور التطبيق من الجهاز'}
                 </h3>
               </div>
               <button
@@ -712,6 +1960,7 @@ export function GalleryPage({
                   </div>
                 </div>
               )}
+
               {/* Category Default Selection for new batch */}
               <div
                 style={{
@@ -867,7 +2116,7 @@ export function GalleryPage({
 
                   <div
                     style={{
-                      maxHeight: 320,
+                      maxHeight: 300,
                       overflowY: 'auto',
                       display: 'flex',
                       flexDirection: 'column',
@@ -895,7 +2144,7 @@ export function GalleryPage({
                             width: 52,
                             height: 52,
                             borderRadius: 6,
-                            objectFit: 'cover',
+                            objectFit: 'contain',
                             border: '1px solid #cbd5e1',
                           }}
                         />
@@ -947,7 +2196,14 @@ export function GalleryPage({
               {/* Upload Progress Indicator */}
               {uploadProgress && (
                 <div style={{ marginTop: 14 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      fontSize: 12,
+                      marginBottom: 4,
+                    }}
+                  >
                     <span>جاري رفع الصور إلى Supabase Storage...</span>
                     <span>
                       {uploadProgress.current} من {uploadProgress.total}
@@ -999,127 +2255,23 @@ export function GalleryPage({
         </div>
       )}
 
-      {/* Edit Item Modal */}
-      {editingItem && (
-        <div
-          className="modal-backdrop"
-          onClick={() => !isSavingEdit && setEditingItem(null)}
-        >
-          <div
-            className="modal-panel"
-            style={{ maxWidth: 480 }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-header">
-              <h3>تعديل بيانات الصورة</h3>
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                onClick={() => setEditingItem(null)}
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <form onSubmit={handleSaveEdit}>
-              <div className="modal-body">
-                <div style={{ textAlign: 'center', marginBottom: 14 }}>
-                  <img
-                    src={editingItem.image_url}
-                    alt={editingItem.title}
-                    style={{
-                      width: 120,
-                      height: 120,
-                      borderRadius: 10,
-                      objectFit: 'cover',
-                      border: '1px solid #cbd5e1',
-                    }}
-                  />
-                </div>
-
-                <div className="form-grid">
-                  <div className="col-span-2 field">
-                    <label>اسم المادة / الصورة *</label>
-                    <input
-                      type="text"
-                      className="input"
-                      required
-                      value={editTitle}
-                      onChange={(e) => setEditTitle(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="col-span-2 field">
-                    <label>القسم / التصنيف *</label>
-                    <select
-                      className="select"
-                      value={editCategory}
-                      onChange={(e) => setEditCategory(e.target.value)}
-                    >
-                      {DEFAULT_GALLERY_CATEGORIES.map((cat) => (
-                        <option key={cat} value={cat}>
-                          {cat}
-                        </option>
-                      ))}
-                      <option value="__custom__">+ كتابة قسم مخصص...</option>
-                    </select>
-                  </div>
-
-                  {editCategory === '__custom__' && (
-                    <div className="col-span-2 field">
-                      <label>اسم القسم المخصص</label>
-                      <input
-                        type="text"
-                        className="input"
-                        placeholder="مثال: مستلزمات العيد"
-                        value={editCustomCategory}
-                        onChange={(e) => setEditCustomCategory(e.target.value)}
-                      />
-                    </div>
-                  )}
-
-                  <div className="field">
-                    <label>رقم الترتيب (Position)</label>
-                    <input
-                      type="number"
-                      className="input"
-                      value={editPosition}
-                      onChange={(e) => setEditPosition(Number(e.target.value) || 0)}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  onClick={() => setEditingItem(null)}
-                >
-                  إلغاء
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={isSavingEdit}
-                >
-                  {isSavingEdit ? 'جاري الحفظ...' : 'حفظ التعديل'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirm Modal */}
+      {/* Delete / Clear Confirmation Modal */}
       <ConfirmModal
         open={Boolean(deleteTarget)}
-        title="حذف صورة من المعرض"
-        message={`هل أنت متأكد من حذف صورة «${deleteTarget?.title}» من معرض التطبيق العام؟`}
+        title={
+          deleteTarget?.source === 'gallery'
+            ? 'حذف صورة من المعرض العام'
+            : 'إزالة الصورة من السجل'
+        }
+        message={
+          deleteTarget?.source === 'gallery'
+            ? `هل أنت متأكد من حذف صورة «${deleteTarget?.title}» من معرض التطبيق العام نهائياً؟`
+            : `هل أنت متأكد من إزالة الصورة عن «${deleteTarget?.title}»؟ (سيبقى السجل محفوظاً بدون صورة).`
+        }
         busy={isDeleting}
-        onConfirm={handleDelete}
+        onConfirm={handleDeleteConfirm}
         onCancel={() => setDeleteTarget(null)}
       />
     </div>
   );
 }
-
