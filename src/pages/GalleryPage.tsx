@@ -24,6 +24,7 @@ import {
   RefreshCw,
   Tag,
   Info,
+  Wand2,
 } from 'lucide-react';
 import type {
   AppGalleryItem,
@@ -37,6 +38,197 @@ import { supabase, uploadCatalogMedia } from '../lib/supabase';
 import { ConfirmModal, useToast } from '../components/ToastContext';
 
 export type ImageSourceFilter = 'all' | 'gallery' | 'categories' | 'products' | 'knowledge';
+
+export interface CategoryVisual {
+  emoji: string;
+  bg: string;
+  color: string;
+  defaultImg: string;
+}
+
+/**
+ * خريطة ذكية تعيد أيقونة وصورة افتراضية عالية الدقة حسب اسم المادة أو القسم
+ */
+export function getCategoryVisual(name: string = '', category: string = ''): CategoryVisual {
+  const text = (name + ' ' + category).toLowerCase();
+
+  if (text.includes('جبن') || text.includes('أجبان') || text.includes('اجبان')) {
+    return {
+      emoji: '🧀',
+      bg: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+      color: '#b45309',
+      defaultImg: 'https://images.unsplash.com/photo-1452195100486-9cc805987862?w=400&q=80',
+    };
+  }
+  if (text.includes('لبن') || text.includes('ألبان') || text.includes('حليب')) {
+    return {
+      emoji: '🥛',
+      bg: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)',
+      color: '#0369a1',
+      defaultImg: 'https://images.unsplash.com/photo-1628088062854-d1870b4553da?w=400&q=80',
+    };
+  }
+  if (text.includes('أرز') || text.includes('ارز') || text.includes('حبوب')) {
+    return {
+      emoji: '🌾',
+      bg: 'linear-gradient(135deg, #fef9c3 0%, #fef08a 100%)',
+      color: '#854d0e',
+      defaultImg: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=400&q=80',
+    };
+  }
+  if (text.includes('خبز') || text.includes('مخبوزات') || text.includes('معجنات')) {
+    return {
+      emoji: '🥖',
+      bg: 'linear-gradient(135deg, #ffedd5 0%, #fed7aa 100%)',
+      color: '#9a3412',
+      defaultImg: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400&q=80',
+    };
+  }
+  if (text.includes('دجاج') || text.includes('فروج') || text.includes('دواجن')) {
+    return {
+      emoji: '🍗',
+      bg: 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)',
+      color: '#991b1b',
+      defaultImg: 'https://images.unsplash.com/photo-1587593810167-a84920ea0781?w=400&q=80',
+    };
+  }
+  if (text.includes('لحم') || text.includes('لحوم') || text.includes('شاورما') || text.includes('كباب')) {
+    return {
+      emoji: '🥩',
+      bg: 'linear-gradient(135deg, #ffe4e6 0%, #fecdd3 100%)',
+      color: '#9f1239',
+      defaultImg: 'https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?w=400&q=80',
+    };
+  }
+  if (text.includes('سمك') || text.includes('أسماك') || text.includes('بحري') || text.includes('تونة')) {
+    return {
+      emoji: '🐟',
+      bg: 'linear-gradient(135deg, #e0f2fe 0%, #7dd3fc 100%)',
+      color: '#0369a1',
+      defaultImg: 'https://images.unsplash.com/photo-1534940562479-798485202619?w=400&q=80',
+    };
+  }
+  if (text.includes('بيض')) {
+    return {
+      emoji: '🥚',
+      bg: 'linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%)',
+      color: '#92400e',
+      defaultImg: 'https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?w=400&q=80',
+    };
+  }
+  if (text.includes('فاكه') || text.includes('فواكه') || text.includes('تفاح') || text.includes('برتقال') || text.includes('موز')) {
+    return {
+      emoji: '🍎',
+      bg: 'linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%)',
+      color: '#9d174d',
+      defaultImg: 'https://images.unsplash.com/photo-1610832958506-aa56368176cf?w=400&q=80',
+    };
+  }
+  if (text.includes('خضار') || text.includes('حضار') || text.includes('خضروات') || text.includes('بندورة') || text.includes('خيار') || text.includes('بطاطا')) {
+    return {
+      emoji: '🥦',
+      bg: 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)',
+      color: '#166534',
+      defaultImg: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&q=80',
+    };
+  }
+  if (text.includes('مياه') || text.includes('ماء') || text.includes('عين') || text.includes('مسافي')) {
+    return {
+      emoji: '💧',
+      bg: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)',
+      color: '#0284c7',
+      defaultImg: 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=400&q=80',
+    };
+  }
+  if (text.includes('عصير') || text.includes('عصائر')) {
+    return {
+      emoji: '🧃',
+      bg: 'linear-gradient(135deg, #ffedd5 0%, #fed7aa 100%)',
+      color: '#c2410c',
+      defaultImg: 'https://images.unsplash.com/photo-1613478223719-2ab802602423?w=400&q=80',
+    };
+  }
+  if (text.includes('شاي') || text.includes('قهوة')) {
+    return {
+      emoji: '☕',
+      bg: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+      color: '#78350f',
+      defaultImg: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=400&q=80',
+    };
+  }
+  if (text.includes('زيت') || text.includes('سمن') || text.includes('زبدة')) {
+    return {
+      emoji: '🫒',
+      bg: 'linear-gradient(135deg, #ecfccb 0%, #d9f99d 100%)',
+      color: '#3f6212',
+      defaultImg: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=400&q=80',
+    };
+  }
+  if (text.includes('بهار') || text.includes('توابل')) {
+    return {
+      emoji: '🌶️',
+      bg: 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)',
+      color: '#991b1b',
+      defaultImg: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=400&q=80',
+    };
+  }
+  if (text.includes('معلب') || text.includes('صلص') || text.includes('رب البندورة')) {
+    return {
+      emoji: '🥫',
+      bg: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)',
+      color: '#334155',
+      defaultImg: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=400&q=80',
+    };
+  }
+  if (text.includes('بسكويت') || text.includes('شيبس') || text.includes('مقرمشات') || text.includes('حلويات') || text.includes('شوكولا')) {
+    return {
+      emoji: '🍪',
+      bg: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+      color: '#92400e',
+      defaultImg: 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=400&q=80',
+    };
+  }
+  if (text.includes('تنظيف') || text.includes('صابون') || text.includes('عناية') || text.includes('شامبو')) {
+    return {
+      emoji: '🧼',
+      bg: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+      color: '#15803d',
+      defaultImg: 'https://images.unsplash.com/photo-1600857544200-b2f666a9a2ec?w=400&q=80',
+    };
+  }
+  if (text.includes('محارم') || text.includes('ورق')) {
+    return {
+      emoji: '🧻',
+      bg: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+      color: '#475569',
+      defaultImg: 'https://images.unsplash.com/photo-1584556812952-905ffd0c611a?w=400&q=80',
+    };
+  }
+  if (text.includes('مستلزمات') || text.includes('منزل') || text.includes('أدوات')) {
+    return {
+      emoji: '🏠',
+      bg: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+      color: '#1e293b',
+      defaultImg: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=400&q=80',
+    };
+  }
+  if (text.includes('يومي') || text.includes('المشتريات')) {
+    return {
+      emoji: '🛒',
+      bg: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+      color: '#b45309',
+      defaultImg: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80',
+    };
+  }
+
+  // الافتراضي العام
+  return {
+    emoji: '📦',
+    bg: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)',
+    color: '#475569',
+    defaultImg: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80',
+  };
+}
 
 export interface UnifiedImageItem {
   id: string; // Unique key in list
@@ -67,6 +259,115 @@ interface PendingUploadItem {
   previewUrl: string;
   title: string;
   category: string;
+}
+
+/**
+ * مكوّن عرض الصورة الذكي:
+ * يمنع ظهور خطأ Image Error نهائياً، ويستبدل الروابط التالفة بصور عالية الجودة وبطاقات أنيقة
+ */
+function UnifiedCardImage({
+  item,
+  onQuickUpload,
+}: {
+  item: UnifiedImageItem;
+  onQuickUpload: (file: File) => void;
+}) {
+  const visual = useMemo(() => getCategoryVisual(item.title, item.category), [item.title, item.category]);
+  const [errorLevel, setErrorLevel] = useState<number>(0);
+
+  const activeSrc = useMemo(() => {
+    if (errorLevel === 0 && item.imageUrl && item.imageUrl.trim()) {
+      return item.imageUrl;
+    }
+    if (errorLevel <= 1 && visual.defaultImg) {
+      return visual.defaultImg;
+    }
+    return '';
+  }, [errorLevel, item.imageUrl, visual.defaultImg]);
+
+  if (errorLevel >= 2 || !activeSrc) {
+    return (
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: visual.bg,
+          color: visual.color,
+          padding: 8,
+          textAlign: 'center',
+          position: 'relative',
+        }}
+      >
+        <span style={{ fontSize: 44, lineHeight: 1, marginBottom: 6 }}>{visual.emoji}</span>
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 800,
+            maxWidth: '90%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {item.title}
+        </span>
+
+        <label
+          style={{
+            marginTop: 6,
+            background: 'rgba(255,255,255,0.92)',
+            color: visual.color,
+            border: `1px solid ${visual.color}`,
+            borderRadius: 6,
+            padding: '3px 8px',
+            fontSize: 10.5,
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Upload size={11} />
+          رفع صورة
+          <input
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onQuickUpload(file);
+            }}
+          />
+        </label>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={activeSrc}
+      alt={item.title}
+      style={{
+        width: '100%',
+        height: '100%',
+        objectFit: 'contain',
+        padding: 4,
+        background: '#fff',
+      }}
+      loading="lazy"
+      onError={() => {
+        // Fallback gracefully without ever showing "Image Error"
+        setErrorLevel((prev) => prev + 1);
+      }}
+    />
+  );
 }
 
 export function GalleryPage({
@@ -136,27 +437,25 @@ export function GalleryPage({
       }
     }
 
-    // 2. Store Categories with images
+    // 2. Store Categories (both with images and categories ready to receive an image)
     for (const cat of categories) {
-      if (cat.image_url && cat.image_url.trim()) {
-        const store = cat.store_id ? storesMap.get(cat.store_id) : null;
-        const isHidden = Boolean(cat.is_hidden) || (cat.position >= 10000);
-        list.push({
-          id: `cat-${cat.id}`,
-          source: 'category',
-          sourceLabel: 'صور الأقسام',
-          rawId: cat.id,
-          title: cat.name,
-          category: cat.name, // Category itself
-          imageUrl: cat.image_url,
-          imageKey: cat.image_key,
-          isActive: !isHidden,
-          storeId: cat.store_id,
-          storeName: store ? store.name : 'متجر',
-          createdAt: cat.created_at,
-          rawItem: cat,
-        });
-      }
+      const store = cat.store_id ? storesMap.get(cat.store_id) : null;
+      const isHidden = Boolean(cat.is_hidden) || (cat.position >= 10000);
+      list.push({
+        id: `cat-${cat.id}`,
+        source: 'category',
+        sourceLabel: 'صور الأقسام',
+        rawId: cat.id,
+        title: cat.name,
+        category: cat.name, // Category itself
+        imageUrl: cat.image_url || '',
+        imageKey: cat.image_key,
+        isActive: !isHidden,
+        storeId: cat.store_id,
+        storeName: store ? store.name : 'متجر',
+        createdAt: cat.created_at,
+        rawItem: cat,
+      });
     }
 
     // 3. Products with images
@@ -221,11 +520,9 @@ export function GalleryPage({
   // Unique list of all categories across all unified items + standard presets
   const availableCategories = useMemo(() => {
     const set = new Set<string>();
-    // Add default presets
     for (const def of DEFAULT_GALLERY_CATEGORIES) {
       set.add(def);
     }
-    // Add categories from unified items matching the current source filter
     for (const item of allUnifiedItems) {
       if (sourceFilter !== 'all') {
         if (sourceFilter === 'gallery' && item.source !== 'gallery') continue;
@@ -240,7 +537,7 @@ export function GalleryPage({
     return Array.from(set);
   }, [allUnifiedItems, sourceFilter]);
 
-  // Counts by category (taking source filter into account)
+  // Counts by category
   const categoryCounts = useMemo(() => {
     const map: Record<string, number> = {};
     for (const item of allUnifiedItems) {
@@ -279,23 +576,17 @@ export function GalleryPage({
     const q = query.trim().toLowerCase();
     return allUnifiedItems
       .filter((item) => {
-        // Source filter
         if (sourceFilter === 'gallery' && item.source !== 'gallery') return false;
         if (sourceFilter === 'categories' && item.source !== 'category') return false;
         if (sourceFilter === 'products' && item.source !== 'product') return false;
         if (sourceFilter === 'knowledge' && item.source !== 'knowledge') return false;
 
-        // Category filter
         if (selectedCategory !== 'all' && item.category !== selectedCategory) return false;
-
-        // Store filter
         if (selectedStoreId !== 'all' && item.storeId && item.storeId !== selectedStoreId) return false;
 
-        // Status filter
         if (statusFilter === 'active' && !item.isActive) return false;
         if (statusFilter === 'inactive' && item.isActive) return false;
 
-        // Search query
         if (!q) return true;
         return (
           item.title.toLowerCase().includes(q) ||
@@ -306,13 +597,11 @@ export function GalleryPage({
         );
       })
       .sort((a, b) => {
-        // Sort Daily purchases first if viewing all
         const isDailyA = a.category === 'المشتريات اليومية' || a.imageKey === 'daily';
         const isDailyB = b.category === 'المشتريات اليومية' || b.imageKey === 'daily';
         if (isDailyA && !isDailyB) return -1;
         if (!isDailyA && isDailyB) return 1;
 
-        // Group by category, then title
         if (a.category !== b.category) return a.category.localeCompare(b.category, 'ar');
         return a.title.localeCompare(b.title, 'ar');
       });
@@ -329,6 +618,10 @@ export function GalleryPage({
   const [customUploadCategory, setCustomUploadCategory] = useState<string>('');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
+
+  // Auto-repair categories modal state
+  const [isAutoRepairing, setIsAutoRepairing] = useState(false);
+  const [showAutoRepairConfirm, setShowAutoRepairConfirm] = useState(false);
 
   // Edit item state
   const [editingItem, setEditingItem] = useState<UnifiedImageItem | null>(null);
@@ -368,6 +661,84 @@ export function GalleryPage({
     }
   };
 
+  // Quick single image upload from device directly on any card
+  const handleQuickUpload = async (item: UnifiedImageItem, file: File) => {
+    try {
+      notify(`جاري رفع صورة «${item.title}» من جهازك...`);
+      const folder =
+        item.source === 'category'
+          ? 'categories'
+          : item.source === 'product'
+          ? 'products'
+          : 'app_gallery';
+
+      const { publicUrl } = await uploadCatalogMedia(file, folder);
+
+      if (item.source === 'category') {
+        const { error } = await supabase
+          .from('store_categories')
+          .update({ image_url: publicUrl })
+          .eq('id', item.rawId);
+        if (error) throw error;
+      } else if (item.source === 'product') {
+        const { error } = await supabase
+          .from('products')
+          .update({ image_url: publicUrl })
+          .eq('id', item.rawId);
+        if (error) throw error;
+      } else if (item.source === 'gallery') {
+        const { error } = await supabase
+          .from('app_gallery')
+          .update({ image_url: publicUrl })
+          .eq('id', item.rawId);
+        if (error) throw error;
+      } else if (item.source === 'knowledge') {
+        const { error } = await supabase
+          .from('product_knowledge')
+          .update({ image_url: publicUrl })
+          .eq('id', item.rawId);
+        if (error) throw error;
+      }
+
+      notify(`تم تحديث وحفظ صورة «${item.title}» بنجاح!`);
+      await onReload();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'فشل رفع الصورة', 'error');
+    }
+  };
+
+  // Auto Repair / Assign standard verified high-resolution food images for all categories
+  const handleAutoRepairAllCategories = async () => {
+    setIsAutoRepairing(true);
+    try {
+      let updatedCount = 0;
+      for (const cat of categories) {
+        const visual = getCategoryVisual(cat.name);
+        // Only update if image_url is missing or points to the old broken storage paths
+        const isBroken =
+          !cat.image_url ||
+          cat.image_url.includes('sections/1793') ||
+          cat.image_url.includes('ffoeosleputnezuafpcu');
+
+        if (isBroken && visual.defaultImg) {
+          const { error } = await supabase
+            .from('store_categories')
+            .update({ image_url: visual.defaultImg })
+            .eq('id', cat.id);
+          if (!error) updatedCount++;
+        }
+      }
+
+      notify(`تم إصلاح وتعيين صور عالية الجودة لـ (${updatedCount}) قسم بنجاح!`);
+      setShowAutoRepairConfirm(false);
+      await onReload();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'فشل إصلاح الصور', 'error');
+    } finally {
+      setIsAutoRepairing(false);
+    }
+  };
+
   // Toggle Visibility in App & Admin ("اسمح بعرضها بالادمن والتطبيق")
   const handleToggleActive = async (item: UnifiedImageItem) => {
     const nextState = !item.isActive;
@@ -379,14 +750,12 @@ export function GalleryPage({
           .eq('id', item.rawId);
         if (error) throw error;
       } else if (item.source === 'category') {
-        // For category: is_hidden = !nextState
         const { error } = await supabase
           .from('store_categories')
           .update({ is_hidden: !nextState })
           .eq('id', item.rawId);
         if (error) throw error;
       } else if (item.source === 'product') {
-        // For product: available = nextState
         const { error } = await supabase
           .from('products')
           .update({ available: nextState })
@@ -416,13 +785,16 @@ export function GalleryPage({
     }
     setPromotingId(item.id);
     try {
+      const visual = getCategoryVisual(item.title, item.category);
       const isDaily =
         item.category === 'المشتريات اليومية' || item.title.trim() === 'المشتريات اليومية';
+
+      const finalUrl = item.imageUrl || visual.defaultImg;
 
       const { error } = await supabase.from('app_gallery').insert({
         title: item.title,
         category: item.category || 'عام',
-        image_url: item.imageUrl,
+        image_url: finalUrl,
         image_key: isDaily ? 'daily' : null,
         position: isDaily ? -1 : 0,
         is_active: true,
@@ -440,10 +812,11 @@ export function GalleryPage({
 
   // Start Edit
   const startEdit = (item: UnifiedImageItem) => {
+    const visual = getCategoryVisual(item.title, item.category);
     setEditingItem(item);
     setEditTitle(item.title);
     setEditNameEn(item.nameEn || '');
-    setEditImageUrl(item.imageUrl);
+    setEditImageUrl(item.imageUrl || visual.defaultImg);
     setEditPrice(item.price ?? '');
     setEditUnit(item.unit || '');
     setEditOrigin(item.origin || '');
@@ -475,7 +848,6 @@ export function GalleryPage({
     try {
       let finalImageUrl = editImageUrl;
 
-      // If user uploaded a new image file from their device
       if (editImageFile) {
         const folder =
           editingItem.source === 'category'
@@ -573,7 +945,6 @@ export function GalleryPage({
         if (error) throw error;
         notify(`تم حذف صورة «${deleteTarget.title}» من المعرض العام`);
       } else if (deleteTarget.source === 'category') {
-        // Clear image URL for category
         const { error } = await supabase
           .from('store_categories')
           .update({ image_url: null, image_key: null })
@@ -581,7 +952,6 @@ export function GalleryPage({
         if (error) throw error;
         notify(`تم مسح صورة القسم «${deleteTarget.title}»`);
       } else if (deleteTarget.source === 'product') {
-        // Clear image URL for product
         const { error } = await supabase
           .from('products')
           .update({ image_url: null, image_key: null })
@@ -753,7 +1123,7 @@ export function GalleryPage({
               border: '1px solid rgba(255,255,255,0.1)',
             }}
           >
-            <div style={{ fontSize: 11, color: '#94a3b8' }}>إجمالي الصور</div>
+            <div style={{ fontSize: 11, color: '#94a3b8' }}>إجمالي المعروض</div>
             <div style={{ fontSize: 18, fontWeight: 800, color: '#38bdf8' }}>
               {allUnifiedItems.length}
             </div>
@@ -897,6 +1267,24 @@ export function GalleryPage({
 
         {/* Action Buttons */}
         <div className="toolbar-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {/* Smart Auto Repair Button */}
+          <button
+            type="button"
+            className="btn btn-outline"
+            style={{
+              borderColor: '#10b981',
+              color: '#047857',
+              background: '#ecfdf5',
+              fontWeight: 700,
+            }}
+            title="إصلاح الروابط المعطلة وتعيين صور عالية الجودة للأقسام تلقائياً"
+            onClick={() => setShowAutoRepairConfirm(true)}
+            disabled={isAutoRepairing}
+          >
+            <Wand2 size={15} />
+            إصلاح وتعيين صور الأقسام تلقائياً
+          </button>
+
           <button
             type="button"
             className="btn btn-outline"
@@ -1173,21 +1561,10 @@ export function GalleryPage({
                   }}
                   onClick={() => setPreviewItem(item)}
                 >
-                  <img
-                    src={item.imageUrl}
-                    alt={item.title}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'contain',
-                      padding: 4,
-                      background: '#fff',
-                    }}
-                    loading="lazy"
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).src =
-                        'https://placehold.co/200x200?text=Image+Error';
-                    }}
+                  {/* Smart Card Image with Auto-Fallback (Never Shows Image Error) */}
+                  <UnifiedCardImage
+                    item={item}
+                    onQuickUpload={(file) => handleQuickUpload(item, file)}
                   />
 
                   {/* Source Badge (Top Right) */}
@@ -1417,6 +1794,24 @@ export function GalleryPage({
                     </button>
                   )}
 
+                  {/* Quick Device Upload for this Card */}
+                  <label
+                    className="btn btn-outline btn-sm"
+                    style={{ padding: '4px 6px', cursor: 'pointer' }}
+                    title="رفع صورة جديدة من جهازك مباشرة"
+                  >
+                    <Upload size={13} />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleQuickUpload(item, file);
+                      }}
+                    />
+                  </label>
+
                   {/* Copy Image URL */}
                   <button
                     type="button"
@@ -1424,7 +1819,8 @@ export function GalleryPage({
                     style={{ padding: '4px 6px' }}
                     title="نسخ رابط الصورة"
                     onClick={() => {
-                      navigator.clipboard.writeText(item.imageUrl);
+                      const visual = getCategoryVisual(item.title, item.category);
+                      navigator.clipboard.writeText(item.imageUrl || visual.defaultImg);
                       notify('تم نسخ رابط الصورة إلى الحافظة');
                     }}
                   >
@@ -1501,15 +1897,9 @@ export function GalleryPage({
                   marginBottom: 16,
                 }}
               >
-                <img
-                  src={previewItem.imageUrl}
-                  alt={previewItem.title}
-                  style={{
-                    maxWidth: '100%',
-                    maxHeight: 340,
-                    objectFit: 'contain',
-                    padding: 8,
-                  }}
+                <UnifiedCardImage
+                  item={previewItem}
+                  onQuickUpload={(file) => handleQuickUpload(previewItem, file)}
                 />
               </div>
 
@@ -1611,7 +2001,8 @@ export function GalleryPage({
                   type="button"
                   className="btn btn-outline btn-sm"
                   onClick={() => {
-                    navigator.clipboard.writeText(previewItem.imageUrl);
+                    const visual = getCategoryVisual(previewItem.title, previewItem.category);
+                    navigator.clipboard.writeText(previewItem.imageUrl || visual.defaultImg);
                     notify('تم نسخ رابط الصورة');
                   }}
                 >
@@ -1619,7 +2010,7 @@ export function GalleryPage({
                   نسخ الرابط
                 </button>
                 <a
-                  href={previewItem.imageUrl}
+                  href={previewItem.imageUrl || getCategoryVisual(previewItem.title, previewItem.category).defaultImg}
                   target="_blank"
                   rel="noreferrer"
                   className="btn btn-outline btn-sm"
@@ -1658,6 +2049,18 @@ export function GalleryPage({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Auto Repair Confirmation Modal */}
+      {showAutoRepairConfirm && (
+        <ConfirmModal
+          open={showAutoRepairConfirm}
+          title="إصلاح وتعيين صور الأقسام عالية الدقة تلقائياً"
+          message="سيتم فحص جميع الأقسام التي تملك روابط صور تالفة أو فارغة، وتعيين صور حقيقية عالية الجودة لها تلقائياً بحسب نوع كل قسم (ألبان، أجبان، أرز وحبوب، لحوم، دجاج، خضار، فواكه...). هل تريد الاستمرار؟"
+          busy={isAutoRepairing}
+          onConfirm={handleAutoRepairAllCategories}
+          onCancel={() => setShowAutoRepairConfirm(false)}
+        />
       )}
 
       {/* Edit Modal (مع إمكانية تعديل البيانات وتغيير الصورة من الجهاز) */}
@@ -1713,13 +2116,21 @@ export function GalleryPage({
                     }}
                   >
                     <img
-                      src={editImageFilePreview || editImageUrl}
+                      src={
+                        editImageFilePreview ||
+                        editImageUrl ||
+                        getCategoryVisual(editTitle, editCategory).defaultImg
+                      }
                       alt="preview"
                       style={{
                         width: '100%',
                         height: '100%',
                         objectFit: 'contain',
                         padding: 4,
+                      }}
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src =
+                          getCategoryVisual(editTitle, editCategory).defaultImg;
                       }}
                     />
                   </div>
