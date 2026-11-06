@@ -739,6 +739,72 @@ export function GalleryPage({
     }
   };
 
+  // Sync All Images to App Gallery (makes them all available to the mobile app)
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
+  const handleSyncAllToAppGallery = async () => {
+    setIsSyncingAll(true);
+    try {
+      let added = 0;
+      const existingTitles = new Set(
+        galleryItems.map((g) => g.title.trim().toLowerCase())
+      );
+
+      // 1. Sync Categories to app_gallery
+      for (const cat of categories) {
+        const title = cat.name.trim();
+        if (!existingTitles.has(title.toLowerCase())) {
+          const visual = getCategoryVisual(title);
+          const url = cat.image_url && !cat.image_url.includes('sections/1793')
+            ? cat.image_url
+            : visual.defaultImg;
+
+          const { error } = await supabase.from('app_gallery').insert({
+            title: title,
+            category: title,
+            image_url: url,
+            is_active: true,
+            position: 10,
+          });
+          if (!error) {
+            existingTitles.add(title.toLowerCase());
+            added++;
+          }
+        }
+      }
+
+      // 2. Sync distinct Products to app_gallery
+      for (const prod of products) {
+        const title = prod.name.trim();
+        if (!existingTitles.has(title.toLowerCase())) {
+          const visual = getCategoryVisual(title);
+          const url = prod.image_url && !prod.image_url.includes('goods/1793')
+            ? prod.image_url
+            : visual.defaultImg;
+          const cat = prod.category_id ? categoriesMap.get(prod.category_id) : null;
+
+          const { error } = await supabase.from('app_gallery').insert({
+            title: title,
+            category: cat?.name || 'مواد غذائية',
+            image_url: url,
+            is_active: true,
+            position: 20,
+          });
+          if (!error) {
+            existingTitles.add(title.toLowerCase());
+            added++;
+          }
+        }
+      }
+
+      notify(`تمت مزامنة ونشر (${added}) صورة بنجاح في معرض صور التطبيق!`);
+      await onReload();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'فشلت المزامنة', 'error');
+    } finally {
+      setIsSyncingAll(false);
+    }
+  };
+
   // Toggle Visibility in App & Admin ("اسمح بعرضها بالادمن والتطبيق")
   const handleToggleActive = async (item: UnifiedImageItem) => {
     const nextState = !item.isActive;
@@ -1267,6 +1333,24 @@ export function GalleryPage({
 
         {/* Action Buttons */}
         <div className="toolbar-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {/* Sync All to Mobile App Gallery */}
+          <button
+            type="button"
+            className="btn btn-outline"
+            style={{
+              borderColor: '#7c3aed',
+              color: '#7c3aed',
+              background: '#faf5ff',
+              fontWeight: 700,
+            }}
+            title="نشر ومزامنة كافة صور المواد والأقسام مع تطبيق الهاتف"
+            onClick={handleSyncAllToAppGallery}
+            disabled={isSyncingAll}
+          >
+            <Sparkles size={15} />
+            {isSyncingAll ? 'جاري المزامنة...' : 'مزامنة الصور مع تطبيق الهاتف'}
+          </button>
+
           {/* Smart Auto Repair Button */}
           <button
             type="button"
