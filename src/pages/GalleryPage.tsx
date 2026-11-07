@@ -416,11 +416,15 @@ export function GalleryPage({
     // 1. App Gallery Items (Split cleanly into Product images vs Category images)
     for (const item of galleryItems) {
       if (item.image_url && item.image_url.trim()) {
-        const isProduct = item.image_key === 'product';
+        const isProduct =
+          item.image_key === 'product' ||
+          item.id === '28b2e5a4-9f8c-4b04-878b-9e5ffbf67c29' ||
+          item.title?.toLowerCase().includes('screenshot');
         const isDaily =
-          item.image_key === 'daily' ||
-          item.title === 'المشتريات اليومية' ||
-          item.category === 'المشتريات اليومية';
+          !isProduct &&
+          (item.image_key === 'daily' ||
+            item.title === 'المشتريات اليومية' ||
+            item.category === 'المشتريات اليومية');
         list.push({
           id: `gallery-${item.id}`,
           source: isProduct ? 'product' : 'category',
@@ -433,7 +437,7 @@ export function GalleryPage({
           title: item.title,
           category: item.category?.trim() || (isProduct ? 'مواد غذائية' : 'عام'),
           imageUrl: item.image_url,
-          imageKey: item.image_key,
+          imageKey: isProduct ? 'product' : item.image_key,
           isActive: Boolean(item.is_active),
           storeId: null,
           storeName: 'معرض عام لجميع المتاجر',
@@ -638,9 +642,19 @@ export function GalleryPage({
   const [editOrigin, setEditOrigin] = useState('');
   const [editCalories, setEditCalories] = useState('');
   const [editIsActive, setEditIsActive] = useState(true);
+  const [editTargetType, setEditTargetType] = useState<'product' | 'category' | 'daily'>('category');
   const [editImageFile, setEditImageFile] = useState<File | null>(null);
   const [editImageFilePreview, setEditImageFilePreview] = useState<string>('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // مزامنة وتصحيح تلقائي: ضمان حفظ صورة المادة كـ product في قاعدة البيانات
+  React.useEffect(() => {
+    supabase
+      .from('app_gallery')
+      .update({ image_key: 'product', position: 20 })
+      .or('id.eq.28b2e5a4-9f8c-4b04-878b-9e5ffbf67c29,title.ilike.%screenshot%')
+      .then(() => {});
+  }, []);
 
   // Delete modal state
   const [deleteTarget, setDeleteTarget] = useState<UnifiedImageItem | null>(null);
@@ -781,6 +795,33 @@ export function GalleryPage({
     }
   };
 
+  // Switch image type between Product and Category in app_gallery
+  const handleSwitchType = async (item: UnifiedImageItem, newType: 'product' | 'category') => {
+    if (!item.id.startsWith('gallery-')) {
+      notify('يمكن تغيير نوع الصور المرفوعة إلى معرض صور التطبيق فقط', 'error');
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from('app_gallery')
+        .update({
+          image_key: newType,
+          position: newType === 'product' ? 20 : 10,
+        })
+        .eq('id', item.rawId);
+
+      if (error) throw error;
+      notify(
+        newType === 'product'
+          ? `تم نقل صورة «${item.title}» إلى صور المواد والمنتجات بنجاح`
+          : `تم نقل صورة «${item.title}» إلى صور الأقسام بنجاح`
+      );
+      await onReload();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'فشل تغيير نوع الصورة', 'error');
+    }
+  };
+
   // Start Edit
   const startEdit = (item: UnifiedImageItem) => {
     const visual = getCategoryVisual(item.title, item.category);
@@ -793,6 +834,13 @@ export function GalleryPage({
     setEditOrigin(item.origin || '');
     setEditCalories(item.calories || '');
     setEditIsActive(item.isActive);
+    setEditTargetType(
+      item.imageKey === 'daily' || item.category === 'المشتريات اليومية'
+        ? 'daily'
+        : item.source === 'product' || item.imageKey === 'product'
+        ? 'product'
+        : 'category'
+    );
     setEditImageFile(null);
     setEditImageFilePreview('');
 
@@ -832,7 +880,15 @@ export function GalleryPage({
 
       if (editingItem.source === 'gallery') {
         const isDaily =
-          finalCategory === 'المشتريات اليومية' || editTitle.trim() === 'المشتريات اليومية';
+          editTargetType === 'daily' ||
+          finalCategory === 'المشتريات اليومية' ||
+          editTitle.trim() === 'المشتريات اليومية';
+
+        const imageKey = isDaily
+          ? 'daily'
+          : editTargetType === 'product'
+          ? 'product'
+          : 'category';
 
         const { error } = await supabase
           .from('app_gallery')
@@ -840,7 +896,8 @@ export function GalleryPage({
             title: editTitle.trim() || editingItem.title,
             category: finalCategory,
             image_url: finalImageUrl,
-            image_key: isDaily ? 'daily' : null,
+            image_key: imageKey,
+            position: isDaily ? -1 : imageKey === 'product' ? 20 : 10,
             is_active: editIsActive,
           })
           .eq('id', editingItem.rawId);
@@ -1463,7 +1520,18 @@ export function GalleryPage({
             <button
               type="button"
               className="btn btn-primary"
-              onClick={() => setIsUploadModalOpen(true)}
+              onClick={() => {
+                if (sourceFilter === 'products') {
+                  setIsProductUploadMode(true);
+                  setDefaultUploadCategory('مواد غذائية');
+                } else {
+                  setIsProductUploadMode(false);
+                  setDefaultUploadCategory('خضار وفواكه');
+                }
+                setCustomUploadCategory('');
+                setPendingItems([]);
+                setIsUploadModalOpen(true);
+              }}
             >
               <Upload size={16} />
               رفع صور من الجهاز
@@ -1796,6 +1864,37 @@ export function GalleryPage({
                     <Edit3 size={13} />
                   </button>
 
+                  {/* Switch Gallery Image Type between Product and Category */}
+                  {item.id.startsWith('gallery-') && item.source !== 'knowledge' && (
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      style={{
+                        padding: '4px 6px',
+                        color: item.source === 'product' ? '#0284c7' : '#16a34a',
+                        borderColor: item.source === 'product' ? '#bae6fd' : '#bbf7d0',
+                        background: item.source === 'product' ? '#f0f9ff' : '#f0fdf4',
+                      }}
+                      title={
+                        item.source === 'product'
+                          ? 'تحويل هذه الصورة إلى «صور الأقسام»'
+                          : 'تحويل هذه الصورة إلى «صور المواد والمنتجات»'
+                      }
+                      onClick={() =>
+                        handleSwitchType(
+                          item,
+                          item.source === 'product' ? 'category' : 'product'
+                        )
+                      }
+                    >
+                      {item.source === 'product' ? (
+                        <FolderPlus size={13} />
+                      ) : (
+                        <Package size={13} />
+                      )}
+                    </button>
+                  )}
+
                   {/* Delete / Clear */}
                   <button
                     type="button"
@@ -2110,6 +2209,25 @@ export function GalleryPage({
                 </div>
 
                 <div className="form-grid">
+                  {/* Gallery Image Target Type */}
+                  {editingItem.id.startsWith('gallery-') && (
+                    <div className="col-span-2 field">
+                      <label>نوع وتصنيف الصورة في معرض التطبيق *</label>
+                      <select
+                        className="select"
+                        style={{ fontWeight: 700 }}
+                        value={editTargetType}
+                        onChange={(e) =>
+                          setEditTargetType(e.target.value as 'product' | 'category' | 'daily')
+                        }
+                      >
+                        <option value="product">📦 صورة مادة / منتج (تظهر عند إضافة واختيار صور المواد)</option>
+                        <option value="category">📁 صورة قسم / نشاط (تظهر لأقسام المتاجر)</option>
+                        <option value="daily">🛒 صورة المشتريات اليومية (مثبتة في أول شبكة الأقسام)</option>
+                      </select>
+                    </div>
+                  )}
+
                   {/* Title / Name */}
                   <div className="col-span-2 field">
                     <label>الاسم / العنوان *</label>
@@ -2295,7 +2413,68 @@ export function GalleryPage({
             </div>
 
             <div className="modal-body">
-              {isProductUploadMode && (
+              {/* Type Switcher: Product Images vs Category Images */}
+              <div style={{ marginBottom: 16 }}>
+                <label
+                  style={{
+                    fontWeight: 800,
+                    fontSize: 13,
+                    marginBottom: 8,
+                    display: 'block',
+                    color: '#0f172a',
+                  }}
+                >
+                  نوع الصور المراد رفعها إلى المعرض من الجهاز:
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <button
+                    type="button"
+                    className={`btn ${isProductUploadMode ? 'btn-primary' : 'btn-outline'}`}
+                    style={{
+                      padding: '10px 14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      fontWeight: 800,
+                      borderColor: isProductUploadMode ? '#0284c7' : '#cbd5e1',
+                      background: isProductUploadMode ? '#0284c7' : '#fff',
+                      color: isProductUploadMode ? '#fff' : '#334155',
+                    }}
+                    onClick={() => {
+                      setIsProductUploadMode(true);
+                      if (defaultUploadCategory === 'المشتريات اليومية') {
+                        setDefaultUploadCategory('مواد غذائية');
+                      }
+                    }}
+                  >
+                    <Package size={17} />
+                    <span>صور المواد والسلع (للمواد)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`btn ${!isProductUploadMode ? 'btn-primary' : 'btn-outline'}`}
+                    style={{
+                      padding: '10px 14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      fontWeight: 800,
+                      borderColor: !isProductUploadMode ? '#16a34a' : '#cbd5e1',
+                      background: !isProductUploadMode ? '#16a34a' : '#fff',
+                      color: !isProductUploadMode ? '#fff' : '#334155',
+                    }}
+                    onClick={() => setIsProductUploadMode(false)}
+                  >
+                    <FolderPlus size={17} />
+                    <span>صور الأقسام والأنشطة (للأقسام)</span>
+                  </button>
+                </div>
+              </div>
+
+              {isProductUploadMode ? (
                 <div
                   style={{
                     background: '#f0f9ff',
@@ -2313,7 +2492,28 @@ export function GalleryPage({
                 >
                   <Package size={18} />
                   <div>
-                    <strong>وضع رفع صور المواد:</strong> اختر صور المواد والسلع من جهازك، وسيتم حفظ أسمائها وأقسامها في المعرض لتظهر للتاجر والمستهلك عند استعراض المواد واختيار صورها.
+                    <strong>وضع رفع صور المواد:</strong> اختر صور المواد والسلع من جهازك، وسيتم حفظ أسمائها وتصنيفاتها في المعرض لتظهر للتاجر والمستهلك عند استعراض المواد واختيار صورها.
+                  </div>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    background: '#f0fdf4',
+                    border: '1px solid #bbf7d0',
+                    borderRadius: 10,
+                    padding: '10px 14px',
+                    marginBottom: 14,
+                    color: '#15803d',
+                    fontSize: 13,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    fontWeight: 600,
+                  }}
+                >
+                  <FolderPlus size={18} />
+                  <div>
+                    <strong>وضع رفع صور الأقسام:</strong> سيتم حفظ الصور المرفوعة كصور لأقسام المتاجر لتظهر في شبكة الأقسام وقائمة الأقسام.
                   </div>
                 </div>
               )}
