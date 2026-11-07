@@ -418,6 +418,8 @@ export function GalleryPage({
       if (item.image_url && item.image_url.trim()) {
         const isProduct =
           item.image_key === 'product' ||
+          item.id === '690a212b-e30d-4d80-9395-eaf98e57f1c9' ||
+          item.id === 'a46c0790-5abb-40eb-9bc6-2a79b1c10bef' ||
           item.id === '28b2e5a4-9f8c-4b04-878b-9e5ffbf67c29' ||
           item.title?.toLowerCase().includes('screenshot');
         const isDaily =
@@ -623,7 +625,7 @@ export function GalleryPage({
 
   // Upload modal states
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [isProductUploadMode, setIsProductUploadMode] = useState(false);
+  const [isProductUploadMode, setIsProductUploadMode] = useState(true);
   const [pendingItems, setPendingItems] = useState<PendingUploadItem[]>([]);
   const [defaultUploadCategory, setDefaultUploadCategory] = useState<string>('خضار وفواكه');
   const [customUploadCategory, setCustomUploadCategory] = useState<string>('');
@@ -660,7 +662,9 @@ export function GalleryPage({
     supabase
       .from('app_gallery')
       .update({ image_key: 'product', position: 20 })
-      .or('id.eq.28b2e5a4-9f8c-4b04-878b-9e5ffbf67c29,title.ilike.%screenshot%')
+      .or(
+        'id.eq.690a212b-e30d-4d80-9395-eaf98e57f1c9,id.eq.a46c0790-5abb-40eb-9bc6-2a79b1c10bef,id.eq.28b2e5a4-9f8c-4b04-878b-9e5ffbf67c29,title.ilike.%screenshot%'
+      )
       .then(() => {});
   }, []);
 
@@ -1528,11 +1532,11 @@ export function GalleryPage({
               type="button"
               className="btn btn-primary"
               onClick={() => {
-                if (sourceFilter === 'products') {
-                  setIsProductUploadMode(true);
-                  setDefaultUploadCategory('مواد غذائية');
-                } else {
+                if (sourceFilter === 'categories') {
                   setIsProductUploadMode(false);
+                  setDefaultUploadCategory('خضار وفواكه');
+                } else {
+                  setIsProductUploadMode(true);
                   setDefaultUploadCategory('خضار وفواكه');
                 }
                 setCustomUploadCategory('');
