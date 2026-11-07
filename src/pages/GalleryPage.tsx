@@ -33,7 +33,7 @@ import type {
   StoreRow,
   ProductKnowledgeRow,
 } from '../types/database';
-import { DEFAULT_GALLERY_CATEGORIES, formatDateTime, STANDARD_PRODUCT_CATALOG } from '../lib/constants';
+import { DEFAULT_GALLERY_CATEGORIES, formatDateTime } from '../lib/constants';
 import { supabase, uploadCatalogMedia } from '../lib/supabase';
 import { ConfirmModal, useToast } from '../components/ToastContext';
 
@@ -391,25 +391,6 @@ export function GalleryPage({
   const [selectedStoreId, setSelectedStoreId] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
-  // تخزين العناصر القياسية المحذوفة أو المخفية محلياً
-  const [deletedStdIds, setDeletedStdIds] = useState<Set<string>>(() => {
-    try {
-      const saved = localStorage.getItem('h_deleted_std_product_ids');
-      return saved ? new Set(JSON.parse(saved)) : new Set();
-    } catch {
-      return new Set();
-    }
-  });
-
-  const [hiddenStdIds, setHiddenStdIds] = useState<Set<string>>(() => {
-    try {
-      const saved = localStorage.getItem('h_hidden_std_product_ids');
-      return saved ? new Set(JSON.parse(saved)) : new Set();
-    } catch {
-      return new Set();
-    }
-  });
-
   // Stores lookup map
   const storesMap = useMemo(() => {
     const map = new Map<string, StoreRow>();
@@ -464,46 +445,6 @@ export function GalleryPage({
           rawItem: item,
         });
       }
-    }
-
-    // 1.b صور المواد القياسية الموحدة مع التطبيق (STANDARD_PRODUCT_CATALOG)
-    const existingGalleryUrls = new Set(galleryItems.map((g) => g.image_url?.trim()));
-    const existingGalleryTitles = new Set(galleryItems.map((g) => g.title?.trim().toLowerCase()));
-
-    for (const std of STANDARD_PRODUCT_CATALOG) {
-      if (deletedStdIds.has(std.id)) continue;
-      // عدم التكرار إذا كانت الصورة مخزنة مسبقاً في قاعدة البيانات
-      if (
-        existingGalleryUrls.has(std.imageUrl.trim()) ||
-        existingGalleryTitles.has(std.title.trim().toLowerCase())
-      ) {
-        continue;
-      }
-
-      list.push({
-        id: `std-${std.id}`,
-        source: 'product',
-        sourceLabel: 'صور المواد والمنتجات',
-        rawId: std.id,
-        title: std.title,
-        category: std.category,
-        imageUrl: std.imageUrl,
-        imageKey: 'product',
-        isActive: !hiddenStdIds.has(std.id),
-        storeId: null,
-        storeName: 'معرض عام لجميع المتاجر',
-        createdAt: new Date().toISOString(),
-        rawItem: {
-          id: std.id,
-          title: std.title,
-          category: std.category,
-          image_url: std.imageUrl,
-          image_key: 'product',
-          position: 20,
-          is_active: !hiddenStdIds.has(std.id),
-          created_at: new Date().toISOString(),
-        } as AppGalleryItem,
-      });
     }
 
     // 2. Store Categories with images
@@ -585,7 +526,7 @@ export function GalleryPage({
     }
 
     return list;
-  }, [galleryItems, categories, products, knowledgeItems, storesMap, categoriesMap, deletedStdIds, hiddenStdIds]);
+  }, [galleryItems, categories, products, knowledgeItems, storesMap, categoriesMap]);
 
   // Unique list of all categories across all unified items + standard presets
   const availableCategories = useMemo(() => {
@@ -706,52 +647,21 @@ export function GalleryPage({
   const [editImageFilePreview, setEditImageFilePreview] = useState<string>('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
-  // مزامنة وتصحيح تلقائي: ضمان حفظ صورة المادة كـ product وحفظ كتالوج المواد في قاعدة البيانات
+  // مزامنة وتصحيح تلقائي: ضمان بقاء الصور المرفوعة من الأدمن فقط وحفظ صور المواد كـ product
   React.useEffect(() => {
+    supabase
+      .from('app_gallery')
+      .delete()
+      .ilike('image_url', '%images.unsplash.com%')
+      .then(({ count }) => {
+        if (count && count > 0) onReload();
+      });
+
     supabase
       .from('app_gallery')
       .update({ image_key: 'product', position: 20 })
       .or('id.eq.28b2e5a4-9f8c-4b04-878b-9e5ffbf67c29,title.ilike.%screenshot%')
       .then(() => {});
-
-    // مزامنة وحفظ كتالوج المواد القياسي في Supabase app_gallery
-    const syncStandardCatalog = async () => {
-      try {
-        const { data: currentRows, error: fetchErr } = await supabase
-          .from('app_gallery')
-          .select('title, image_url');
-
-        if (fetchErr || !currentRows) return;
-
-        const currentUrls = new Set(currentRows.map((r) => r.image_url?.trim()));
-        const currentTitles = new Set(currentRows.map((r) => r.title?.trim().toLowerCase()));
-
-        const toInsert = STANDARD_PRODUCT_CATALOG.filter(
-          (std) =>
-            !deletedStdIds.has(std.id) &&
-            !currentUrls.has(std.imageUrl.trim()) &&
-            !currentTitles.has(std.title.trim().toLowerCase())
-        ).map((std) => ({
-          title: std.title,
-          category: std.category,
-          image_url: std.imageUrl,
-          image_key: 'product',
-          position: 20,
-          is_active: !hiddenStdIds.has(std.id),
-        }));
-
-        if (toInsert.length > 0) {
-          const { error: insErr } = await supabase.from('app_gallery').insert(toInsert);
-          if (!insErr) {
-            onReload();
-          }
-        }
-      } catch (err) {
-        console.warn('Sync standard catalog error:', err);
-      }
-    };
-
-    syncStandardCatalog();
   }, []);
 
   // Delete modal state
@@ -789,22 +699,7 @@ export function GalleryPage({
 
       const { publicUrl } = await uploadCatalogMedia(file, folder);
 
-      if (item.id.startsWith('std-')) {
-        const nextDeleted = new Set(deletedStdIds);
-        nextDeleted.add(item.rawId);
-        setDeletedStdIds(nextDeleted);
-        localStorage.setItem('h_deleted_std_product_ids', JSON.stringify(Array.from(nextDeleted)));
-
-        const { error } = await supabase.from('app_gallery').insert({
-          title: item.title,
-          category: item.category,
-          image_url: publicUrl,
-          image_key: 'product',
-          position: 20,
-          is_active: true,
-        });
-        if (error) throw error;
-      } else if (item.source === 'category') {
+      if (item.source === 'category') {
         const { error } = await supabase
           .from('store_categories')
           .update({ image_url: publicUrl })
@@ -841,21 +736,7 @@ export function GalleryPage({
   const handleToggleActive = async (item: UnifiedImageItem) => {
     const nextState = !item.isActive;
     try {
-      if (item.id.startsWith('std-')) {
-        const nextHidden = new Set(hiddenStdIds);
-        if (nextState) {
-          nextHidden.delete(item.rawId);
-        } else {
-          nextHidden.add(item.rawId);
-        }
-        setHiddenStdIds(nextHidden);
-        localStorage.setItem('h_hidden_std_product_ids', JSON.stringify(Array.from(nextHidden)));
-
-        await supabase
-          .from('app_gallery')
-          .update({ is_active: nextState })
-          .or(`title.eq."${item.title}",image_url.eq."${item.imageUrl}"`);
-      } else if (item.source === 'gallery') {
+      if (item.source === 'gallery') {
         const { error } = await supabase
           .from('app_gallery')
           .update({ is_active: nextState })
@@ -924,36 +805,20 @@ export function GalleryPage({
 
   // Switch image type between Product and Category in app_gallery
   const handleSwitchType = async (item: UnifiedImageItem, newType: 'product' | 'category') => {
-    if (!item.id.startsWith('gallery-') && !item.id.startsWith('std-')) {
+    if (!item.id.startsWith('gallery-')) {
       notify('يمكن تغيير نوع الصور المرفوعة إلى معرض صور التطبيق فقط', 'error');
       return;
     }
     try {
-      if (item.id.startsWith('std-')) {
-        const { error } = await supabase.from('app_gallery').upsert(
-          {
-            title: item.title,
-            category: item.category,
-            image_url: item.imageUrl,
-            image_key: newType,
-            position: newType === 'product' ? 20 : 10,
-            is_active: item.isActive,
-          },
-          { onConflict: 'image_url' }
-        );
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('app_gallery')
-          .update({
-            image_key: newType,
-            position: newType === 'product' ? 20 : 10,
-          })
-          .eq('id', item.rawId);
+      const { error } = await supabase
+        .from('app_gallery')
+        .update({
+          image_key: newType,
+          position: newType === 'product' ? 20 : 10,
+        })
+        .eq('id', item.rawId);
 
-        if (error) throw error;
-      }
-
+      if (error) throw error;
       notify(
         newType === 'product'
           ? `تم نقل صورة «${item.title}» إلى صور المواد والمنتجات بنجاح`
@@ -1021,28 +886,7 @@ export function GalleryPage({
         finalImageUrl = publicUrl;
       }
 
-      if (editingItem.id.startsWith('std-')) {
-        const nextDeleted = new Set(deletedStdIds);
-        nextDeleted.add(editingItem.rawId);
-        setDeletedStdIds(nextDeleted);
-        localStorage.setItem('h_deleted_std_product_ids', JSON.stringify(Array.from(nextDeleted)));
-
-        await supabase
-          .from('app_gallery')
-          .delete()
-          .or(`title.eq."${editingItem.title}",image_url.eq."${editingItem.imageUrl}"`);
-
-        const { error } = await supabase.from('app_gallery').insert({
-          title: editTitle.trim() || editingItem.title,
-          category: finalCategory,
-          image_url: finalImageUrl,
-          image_key: editTargetType === 'product' ? 'product' : 'category',
-          position: editTargetType === 'product' ? 20 : 10,
-          is_active: editIsActive,
-        });
-
-        if (error) throw error;
-      } else if (editingItem.source === 'gallery') {
+      if (editingItem.source === 'gallery') {
         const isDaily =
           editTargetType === 'daily' ||
           finalCategory === 'المشتريات اليومية' ||
@@ -1129,19 +973,7 @@ export function GalleryPage({
     if (!deleteTarget) return;
     setIsDeleting(true);
     try {
-      if (deleteTarget.id.startsWith('std-')) {
-        const nextDeleted = new Set(deletedStdIds);
-        nextDeleted.add(deleteTarget.rawId);
-        setDeletedStdIds(nextDeleted);
-        localStorage.setItem('h_deleted_std_product_ids', JSON.stringify(Array.from(nextDeleted)));
-
-        await supabase
-          .from('app_gallery')
-          .delete()
-          .or(`title.eq."${deleteTarget.title}",image_url.eq."${deleteTarget.imageUrl}"`);
-
-        notify(`تم حذف صورة «${deleteTarget.title}» نهائياً من المعرض`);
-      } else if (deleteTarget.id.startsWith('gallery-')) {
+      if (deleteTarget.id.startsWith('gallery-')) {
         const { error } = await supabase
           .from('app_gallery')
           .delete()
@@ -2041,7 +1873,7 @@ export function GalleryPage({
                   </button>
 
                   {/* Switch Gallery Image Type between Product and Category */}
-                  {(item.id.startsWith('gallery-') || item.id.startsWith('std-')) && item.source !== 'knowledge' && (
+                  {item.id.startsWith('gallery-') && item.source !== 'knowledge' && (
                     <button
                       type="button"
                       className="btn btn-outline btn-sm"
@@ -2076,7 +1908,7 @@ export function GalleryPage({
                     type="button"
                     className="btn btn-danger btn-sm"
                     style={{ padding: '4px 6px' }}
-                    title={item.source === 'gallery' || item.id.startsWith('std-') ? 'حذف من المعرض' : 'إزالة الصورة'}
+                    title={item.source === 'gallery' ? 'حذف من المعرض' : 'إزالة الصورة'}
                     onClick={() => setDeleteTarget(item)}
                   >
                     <Trash2 size={13} />
