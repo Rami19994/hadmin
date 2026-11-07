@@ -581,3 +581,421 @@ export function profileDisplayName(p?: {
   if (p.phone) return p.phone;
   return 'ضيف / بدون اسم';
 }
+
+
+export interface StandardProductCatalogItem {
+  id: string;
+  title: string;
+  category: string;
+  imageUrl: string;
+  imageKey: 'product';
+}
+
+export const STANDARD_PRODUCT_CATALOG: StandardProductCatalogItem[] = [
+  {
+    "id": "std_tomato",
+    "title": "بندورة طازجة",
+    "category": "خضار وفواكه",
+    "imageUrl": "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_cucumber",
+    "title": "خيار بلدي",
+    "category": "خضار وفواكه",
+    "imageUrl": "https://images.unsplash.com/photo-1604977042946-1eecc30f269e?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_potato",
+    "title": "بطاطا نخب أول",
+    "category": "خضار وفواكه",
+    "imageUrl": "https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_onion",
+    "title": "بصل يابس",
+    "category": "خضار وفواكه",
+    "imageUrl": "https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_garlic",
+    "title": "ثوم بلدي",
+    "category": "خضار وفواكه",
+    "imageUrl": "https://images.unsplash.com/photo-1540148426945-6cf22a6b2383?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_carrot",
+    "title": "جزر طازج",
+    "category": "خضار وفواكه",
+    "imageUrl": "https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_eggplant",
+    "title": "باذنجان أسود",
+    "category": "خضار وفواكه",
+    "imageUrl": "https://images.unsplash.com/photo-1615485290382-441e4d049cb5?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_pepper",
+    "title": "فليفلة خضراء",
+    "category": "خضار وفواكه",
+    "imageUrl": "https://images.unsplash.com/photo-1563565375-f3fdfdbefa83?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_lettuce",
+    "title": "خس روماني",
+    "category": "خضار وفواكه",
+    "imageUrl": "https://images.unsplash.com/photo-1556881286-fc6915169721?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_apple_red",
+    "title": "تفاح أحمر",
+    "category": "خضار وفواكه",
+    "imageUrl": "https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_apple_yellow",
+    "title": "تفاح أصفر",
+    "category": "خضار وفواكه",
+    "imageUrl": "https://images.unsplash.com/photo-1570913149827-d2ac84ab3f9a?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_banana",
+    "title": "موز إكوادوري",
+    "category": "خضار وفواكه",
+    "imageUrl": "https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_orange",
+    "title": "برتقال عصير",
+    "category": "خضار وفواكه",
+    "imageUrl": "https://images.unsplash.com/photo-1611080626919-7cf5a9dbab5b?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_lemon",
+    "title": "ليمون حامض",
+    "category": "خضار وفواكه",
+    "imageUrl": "https://images.unsplash.com/photo-1533038590840-1cde6e668a91?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_grapes",
+    "title": "عنب بلدي",
+    "category": "خضار وفواكه",
+    "imageUrl": "https://images.unsplash.com/photo-1537640538966-79f369143f8f?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_watermelon",
+    "title": "بطيخ أحمر",
+    "category": "خضار وفواكه",
+    "imageUrl": "https://images.unsplash.com/photo-1587049352846-4a222e784d38?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_strawberry",
+    "title": "فريز (فراولة)",
+    "category": "خضار وفواكه",
+    "imageUrl": "https://images.unsplash.com/photo-1464965911861-746a04b4bca6?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_milk",
+    "title": "حليب بقري طازج",
+    "category": "لحوم وألبان",
+    "imageUrl": "https://images.unsplash.com/photo-1628088062854-d1870b4553da?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_cheese_white",
+    "title": "جبنة بلدية بيضاء",
+    "category": "لحوم وألبان",
+    "imageUrl": "https://images.unsplash.com/photo-1452195100486-9cc805987862?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_cheese_yellow",
+    "title": "جبنة قشقوان / شيدر",
+    "category": "لحوم وألبان",
+    "imageUrl": "https://images.unsplash.com/photo-1552767059-ce182ead6c1b?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_laban",
+    "title": "لبن رائب (زبادي)",
+    "category": "لحوم وألبان",
+    "imageUrl": "https://images.unsplash.com/photo-1571212515416-fef01fc43637?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_butter",
+    "title": "زبدة وسمنة حيواني",
+    "category": "لحوم وألبان",
+    "imageUrl": "https://images.unsplash.com/photo-1589985270826-4b7bb135bc9d?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_eggs",
+    "title": "صحن بيض طازج",
+    "category": "لحوم وألبان",
+    "imageUrl": "https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_chicken",
+    "title": "دجاج طازج كامل",
+    "category": "لحوم وألبان",
+    "imageUrl": "https://images.unsplash.com/photo-1587593810167-a84920ea0781?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_meat_beef",
+    "title": "لحم عجل / هبرة",
+    "category": "لحوم وألبان",
+    "imageUrl": "https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_meat_lamb",
+    "title": "لحم غنم بلدي",
+    "category": "لحوم وألبان",
+    "imageUrl": "https://images.unsplash.com/photo-1603048588665-791ca8aea617?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_fish",
+    "title": "سمك بحري طازج",
+    "category": "لحوم وألبان",
+    "imageUrl": "https://images.unsplash.com/photo-1534940562479-798485202619?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_bread_white",
+    "title": "خبز أبيض سياحي",
+    "category": "مواد غذائية",
+    "imageUrl": "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_bread_brown",
+    "title": "خبز أسمر / نخالة",
+    "category": "مواد غذائية",
+    "imageUrl": "https://images.unsplash.com/photo-1549931319-a545dcf3bc73?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_rice_basmati",
+    "title": "أرز بسمتي طويل",
+    "category": "مواد غذائية",
+    "imageUrl": "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_pasta",
+    "title": "معكرونة سباغيتي",
+    "category": "مواد غذائية",
+    "imageUrl": "https://images.unsplash.com/photo-1621996346565-e3d5d6281691?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_flour",
+    "title": "طحين أبيض ممتاز",
+    "category": "مواد غذائية",
+    "imageUrl": "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_sugar",
+    "title": "سكر ناعم",
+    "category": "مواد غذائية",
+    "imageUrl": "https://images.unsplash.com/photo-1587735243615-c03f25aaff15?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_olive_oil",
+    "title": "زيت زيتون بكر ممتاز",
+    "category": "مواد غذائية",
+    "imageUrl": "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_sunflower_oil",
+    "title": "زيت نباتي ذرة / دوار الشمس",
+    "category": "مواد غذائية",
+    "imageUrl": "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_hummus",
+    "title": "حمص حب درجة أولى",
+    "category": "مواد غذائية",
+    "imageUrl": "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_lentils",
+    "title": "عدس أحمر مجروش",
+    "category": "مواد غذائية",
+    "imageUrl": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_spices",
+    "title": "بهارات وتوابل مشكلة",
+    "category": "مواد غذائية",
+    "imageUrl": "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_tuna",
+    "title": "تونة معلبة فاخرة",
+    "category": "معلبات وصلصات",
+    "imageUrl": "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_tomato_paste",
+    "title": "صلصة رب البندورة",
+    "category": "معلبات وصلصات",
+    "imageUrl": "https://images.unsplash.com/photo-1534938665420-4193effeacc4?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_jam",
+    "title": "مربى فريز / مشمش",
+    "category": "معلبات وصلصات",
+    "imageUrl": "https://images.unsplash.com/photo-1506084868230-bb9d95c24759?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_honey",
+    "title": "عسل نحل طبيعي",
+    "category": "معلبات وصلصات",
+    "imageUrl": "https://images.unsplash.com/photo-1587049352847-4a222e784d38?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_halawa",
+    "title": "حلاوة وطحينة",
+    "category": "معلبات وصلصات",
+    "imageUrl": "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_water_bottle",
+    "title": "مياه شرب صحية",
+    "category": "مشروبات وعصائر",
+    "imageUrl": "https://images.unsplash.com/photo-1544816155-12df9643f363?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_juice_orange",
+    "title": "عصير برتقال طبيعي",
+    "category": "مشروبات وعصائر",
+    "imageUrl": "https://images.unsplash.com/photo-1613478223719-2ab802602423?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_soda_cola",
+    "title": "مشروبات غازية كولا",
+    "category": "مشروبات وعصائر",
+    "imageUrl": "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_tea",
+    "title": "شاي سيلاني أسود",
+    "category": "مشروبات وعصائر",
+    "imageUrl": "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_coffee",
+    "title": "قهوة تركية / اسبريسو",
+    "category": "مشروبات وعصائر",
+    "imageUrl": "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_chips",
+    "title": "شيبس بطاطا مقرمش",
+    "category": "حلويات ومقرمشات",
+    "imageUrl": "https://images.unsplash.com/photo-1566478989037-eec170784d0b?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_biscuits",
+    "title": "بسكويت شاي وكوكيز",
+    "category": "حلويات ومقرمشات",
+    "imageUrl": "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_chocolate",
+    "title": "شوكولا وحلويات",
+    "category": "حلويات ومقرمشات",
+    "imageUrl": "https://images.unsplash.com/photo-1511381939415-e44015466834?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_nuts",
+    "title": "مكسرات مشكلة فاخرة",
+    "category": "حلويات ومقرمشات",
+    "imageUrl": "https://images.unsplash.com/photo-1508746829417-e6f548d8d6ed?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_soap",
+    "title": "صابون يدين معقم",
+    "category": "منظفات وعناية شخصية",
+    "imageUrl": "https://images.unsplash.com/photo-1600857544200-b2f666a9a2ec?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_shampoo",
+    "title": "شامبو وشاور جل",
+    "category": "منظفات وعناية شخصية",
+    "imageUrl": "https://images.unsplash.com/photo-1535585209827-a15fcdbc4c2d?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_detergent",
+    "title": "مسحوق غسيل وسوائل جلي",
+    "category": "منظفات وعناية شخصية",
+    "imageUrl": "https://images.unsplash.com/photo-1585421514738-01798e348b17?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_tissues",
+    "title": "مناديل ورقية فاخرة",
+    "category": "منظفات وعناية شخصية",
+    "imageUrl": "https://images.unsplash.com/photo-1584556812952-905ffd0c611a?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_batteries",
+    "title": "بطاريات جافة",
+    "category": "أدوات منزلية ومستهلكات",
+    "imageUrl": "https://images.unsplash.com/photo-1619725002198-6a689b72f41d?w=400&q=80",
+    "imageKey": "product"
+  },
+  {
+    "id": "std_trash_bags",
+    "title": "أكياس قمامة ومستهلكات",
+    "category": "أدوات منزلية ومستهلكات",
+    "imageUrl": "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=400&q=80",
+    "imageKey": "product"
+  }
+];

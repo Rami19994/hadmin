@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Search, X, Image as ImageIcon, Check } from 'lucide-react';
 import type { AppGalleryItem } from '../types/database';
-import { DEFAULT_GALLERY_CATEGORIES } from '../lib/constants';
+import { DEFAULT_GALLERY_CATEGORIES, STANDARD_PRODUCT_CATALOG } from '../lib/constants';
 import { supabase } from '../lib/supabase';
 
 export function GalleryPickerModal({
@@ -45,17 +45,42 @@ export function GalleryPickerModal({
     }
   }, [open]);
 
+  // Combine items from database with the standard product catalog
+  const combinedItems = useMemo(() => {
+    const list = [...items];
+    const seenTitles = new Set(items.map((it) => it.title?.trim().toLowerCase()));
+    const seenUrls = new Set(items.map((it) => it.image_url?.trim()));
+
+    for (const std of STANDARD_PRODUCT_CATALOG) {
+      if (seenTitles.has(std.title.trim().toLowerCase()) || seenUrls.has(std.imageUrl.trim())) {
+        continue;
+      }
+      list.push({
+        id: std.id,
+        title: std.title,
+        category: std.category,
+        image_url: std.imageUrl,
+        image_key: 'product',
+        position: 20,
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    }
+    return list;
+  }, [items]);
+
   const categories = useMemo(() => {
     const set = new Set<string>(DEFAULT_GALLERY_CATEGORIES);
-    for (const it of items) {
+    for (const it of combinedItems) {
       if (it.category) set.add(it.category.trim());
     }
     return Array.from(set);
-  }, [items]);
+  }, [combinedItems]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return items.filter((it) => {
+    return combinedItems.filter((it) => {
       if (typeFilter === 'product') {
         const isProduct = it.image_key === 'product';
         if (!isProduct) return false;
@@ -67,7 +92,7 @@ export function GalleryPickerModal({
       if (!q) return true;
       return it.title.toLowerCase().includes(q) || it.category.toLowerCase().includes(q);
     });
-  }, [items, selectedCat, typeFilter, query]);
+  }, [combinedItems, selectedCat, typeFilter, query]);
 
   if (!open) return null;
 
