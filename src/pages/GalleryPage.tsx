@@ -279,11 +279,8 @@ function UnifiedCardImage({
     if (errorLevel === 0 && item.imageUrl && item.imageUrl.trim()) {
       return item.imageUrl;
     }
-    if (errorLevel <= 1 && visual.defaultImg) {
-      return visual.defaultImg;
-    }
     return '';
-  }, [errorLevel, item.imageUrl, visual.defaultImg]);
+  }, [errorLevel, item.imageUrl]);
 
   if (errorLevel >= 2 || !activeSrc) {
     return (
@@ -446,8 +443,9 @@ export function GalleryPage({
       }
     }
 
-    // 2. Store Categories (both with images and categories ready to receive an image)
+    // 2. Store Categories with images
     for (const cat of categories) {
+      if (!cat.image_url || !cat.image_url.trim()) continue;
       const store = cat.store_id ? storesMap.get(cat.store_id) : null;
       const isHidden = Boolean(cat.is_hidden) || (cat.position >= 10000);
       list.push({
@@ -910,28 +908,28 @@ export function GalleryPage({
     if (!deleteTarget) return;
     setIsDeleting(true);
     try {
-      if (deleteTarget.source === 'gallery') {
+      if (deleteTarget.id.startsWith('gallery-')) {
         const { error } = await supabase
           .from('app_gallery')
           .delete()
           .eq('id', deleteTarget.rawId);
         if (error) throw error;
-        notify(`تم حذف صورة «${deleteTarget.title}» من المعرض العام`);
-      } else if (deleteTarget.source === 'category') {
+        notify(`تم حذف صورة «${deleteTarget.title}» نهائياً من المعرض`);
+      } else if (deleteTarget.id.startsWith('cat-')) {
         const { error } = await supabase
           .from('store_categories')
           .update({ image_url: null, image_key: null })
           .eq('id', deleteTarget.rawId);
         if (error) throw error;
-        notify(`تم مسح صورة القسم «${deleteTarget.title}»`);
-      } else if (deleteTarget.source === 'product') {
+        notify(`تم مسح وحذف صورة القسم «${deleteTarget.title}»`);
+      } else if (deleteTarget.id.startsWith('prod-')) {
         const { error } = await supabase
           .from('products')
           .update({ image_url: null, image_key: null })
           .eq('id', deleteTarget.rawId);
         if (error) throw error;
-        notify(`تم مسح صورة المادة «${deleteTarget.title}»`);
-      } else if (deleteTarget.source === 'knowledge') {
+        notify(`تم مسح وحذف صورة المادة «${deleteTarget.title}»`);
+      } else if (deleteTarget.id.startsWith('know-')) {
         const { error } = await supabase
           .from('product_knowledge')
           .update({ image_url: null })
@@ -2618,14 +2616,14 @@ export function GalleryPage({
       <ConfirmModal
         open={Boolean(deleteTarget)}
         title={
-          deleteTarget?.source === 'gallery'
-            ? 'حذف صورة من المعرض العام'
+          deleteTarget?.id.startsWith('gallery-')
+            ? 'حذف صورة من المعرض نهائياً'
             : 'إزالة الصورة من السجل'
         }
         message={
-          deleteTarget?.source === 'gallery'
-            ? `هل أنت متأكد من حذف صورة «${deleteTarget?.title}» من معرض التطبيق العام نهائياً؟`
-            : `هل أنت متأكد من إزالة الصورة عن «${deleteTarget?.title}»؟ (سيبقى السجل محفوظاً بدون صورة).`
+          deleteTarget?.id.startsWith('gallery-')
+            ? `هل أنت متأكد من حذف صورة «${deleteTarget?.title}» من المعرض نهائياً؟`
+            : `هل أنت متأكد من مسح وإزالة الصورة عن «${deleteTarget?.title}»؟`
         }
         busy={isDeleting}
         onConfirm={handleDeleteConfirm}
