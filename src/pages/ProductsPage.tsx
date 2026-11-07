@@ -1140,6 +1140,7 @@ export function ProductsPage({
         <GalleryPickerModal
           open={showGalleryPicker}
           onClose={() => setShowGalleryPicker(false)}
+          targetType="product"
           initialCategory={
             categories.find((c) => c.id === editing.category_id)?.name || undefined
           }

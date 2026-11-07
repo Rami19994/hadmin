@@ -6,7 +6,6 @@ import {
   Trash2,
   Eye,
   EyeOff,
-  FolderPlus,
   ArrowUp,
   ArrowDown,
   X,
@@ -51,7 +50,6 @@ export function CategoriesPage({
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<StoreCategory | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [seeding, setSeeding] = useState(false);
 
   const storeMap = useMemo(() => new Map(stores.map((s) => [s.id, s])), [stores]);
 
@@ -122,38 +120,6 @@ export function CategoriesPage({
       return;
     }
     await onReload();
-  };
-
-  const handleSeedStore = async () => {
-    setSeeding(true);
-    try {
-      if (effectiveStore !== 'all') {
-        const { data, error } = await supabase.rpc('admin_seed_store_categories', {
-          p_store_id: effectiveStore,
-        });
-        if (error) throw error;
-        notify(`تمت تعبئة الأقسام الإلزامية الناقصة (${data ?? 0} قسم مضاف)`);
-      } else {
-        let totalAdded = 0;
-        for (const st of stores) {
-          const { data, error } = await supabase.rpc('admin_seed_store_categories', {
-            p_store_id: st.id,
-          });
-          if (!error && typeof data === 'number') totalAdded += data;
-        }
-        notify(`تمت تعبئة الأقسام الإلزامية لجميع المتاجر (أُضيف ${totalAdded} قسم)`);
-      }
-      await onReload();
-    } catch (err) {
-      notify(
-        err instanceof Error
-          ? err.message
-          : 'تعذر تعبئة الأقسام — تأكد من تطبيق 0012 و 0013 في SQL Editor',
-        'error'
-      );
-    } finally {
-      setSeeding(false);
-    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -255,20 +221,6 @@ export function CategoriesPage({
         </div>
 
         <div className="toolbar-actions">
-          <button
-            type="button"
-            className="btn btn-yellow"
-            disabled={seeding}
-            onClick={handleSeedStore}
-          >
-            <FolderPlus size={16} />
-            {seeding
-              ? 'جاري التعبئة...'
-              : effectiveStore !== 'all'
-              ? 'تعبئة الأقسام الإلزامية لهذا المتجر'
-              : 'تعبئة الأقسام الإلزامية لكل المتاجر'}
-          </button>
-
           <button
             type="button"
             className="btn btn-primary"
@@ -557,6 +509,7 @@ export function CategoriesPage({
         <GalleryPickerModal
           open={showGalleryPicker}
           onClose={() => setShowGalleryPicker(false)}
+          targetType="category"
           initialCategory={editing.name || undefined}
           onSelect={(url, title) => {
             setEditing((prev) => (prev ? { ...prev, image_url: url } : prev));

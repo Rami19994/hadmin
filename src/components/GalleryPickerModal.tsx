@@ -9,16 +9,23 @@ export function GalleryPickerModal({
   onClose,
   onSelect,
   initialCategory,
+  targetType = 'all',
 }: {
   open: boolean;
   onClose: () => void;
   onSelect: (imageUrl: string, title: string, category: string) => void;
   initialCategory?: string;
+  targetType?: 'product' | 'category' | 'all';
 }) {
   const [items, setItems] = useState<AppGalleryItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'product' | 'category'>(targetType);
   const [selectedCat, setSelectedCat] = useState<string>(initialCategory || 'all');
+
+  useEffect(() => {
+    setTypeFilter(targetType);
+  }, [targetType, open]);
 
   useEffect(() => {
     if (open) {
@@ -49,11 +56,18 @@ export function GalleryPickerModal({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items.filter((it) => {
+      if (typeFilter === 'product') {
+        const isProduct = it.image_key === 'product';
+        if (!isProduct) return false;
+      } else if (typeFilter === 'category') {
+        const isProduct = it.image_key === 'product';
+        if (isProduct) return false;
+      }
       if (selectedCat !== 'all' && it.category !== selectedCat) return false;
       if (!q) return true;
       return it.title.toLowerCase().includes(q) || it.category.toLowerCase().includes(q);
     });
-  }, [items, selectedCat, query]);
+  }, [items, selectedCat, typeFilter, query]);
 
   if (!open) return null;
 
@@ -75,6 +89,34 @@ export function GalleryPickerModal({
         </div>
 
         <div style={{ padding: '12px 16px 0', borderBottom: '1px solid #e2e8f0' }}>
+          {/* Main type switcher: Products vs Categories */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+            <button
+              type="button"
+              className={`tab-pill ${typeFilter === 'product' ? 'active' : ''}`}
+              style={{ fontWeight: 700 }}
+              onClick={() => setTypeFilter('product')}
+            >
+              صور المواد والمنتجات
+            </button>
+            <button
+              type="button"
+              className={`tab-pill ${typeFilter === 'category' ? 'active' : ''}`}
+              style={{ fontWeight: 700 }}
+              onClick={() => setTypeFilter('category')}
+            >
+              صور الأقسام
+            </button>
+            <button
+              type="button"
+              className={`tab-pill ${typeFilter === 'all' ? 'active' : ''}`}
+              style={{ fontWeight: 700 }}
+              onClick={() => setTypeFilter('all')}
+            >
+              الكل ({items.length})
+            </button>
+          </div>
+
           <div className="search-box" style={{ marginBottom: 10 }}>
             <Search size={15} className="search-box-icon" />
             <input

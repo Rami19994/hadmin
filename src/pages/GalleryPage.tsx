@@ -416,16 +416,25 @@ export function GalleryPage({
   const allUnifiedItems: UnifiedImageItem[] = useMemo(() => {
     const list: UnifiedImageItem[] = [];
 
-    // 1. App Gallery Items
+    // 1. App Gallery Items (Split cleanly into Product images vs Category images)
     for (const item of galleryItems) {
       if (item.image_url && item.image_url.trim()) {
+        const isProduct = item.image_key === 'product';
+        const isDaily =
+          item.image_key === 'daily' ||
+          item.title === 'المشتريات اليومية' ||
+          item.category === 'المشتريات اليومية';
         list.push({
           id: `gallery-${item.id}`,
-          source: 'gallery',
-          sourceLabel: 'معرض التطبيق العام',
+          source: isProduct ? 'product' : 'category',
+          sourceLabel: isProduct
+            ? 'صور المواد والمنتجات'
+            : isDaily
+            ? 'المشتريات اليومية'
+            : 'صور الأقسام',
           rawId: item.id,
           title: item.title,
-          category: item.category?.trim() || 'عام',
+          category: item.category?.trim() || (isProduct ? 'مواد غذائية' : 'عام'),
           imageUrl: item.image_url,
           imageKey: item.image_key,
           isActive: Boolean(item.is_active),
@@ -619,10 +628,6 @@ export function GalleryPage({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
 
-  // Auto-repair categories modal state
-  const [isAutoRepairing, setIsAutoRepairing] = useState(false);
-  const [showAutoRepairConfirm, setShowAutoRepairConfirm] = useState(false);
-
   // Edit item state
   const [editingItem, setEditingItem] = useState<UnifiedImageItem | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -704,104 +709,6 @@ export function GalleryPage({
       await onReload();
     } catch (err) {
       notify(err instanceof Error ? err.message : 'فشل رفع الصورة', 'error');
-    }
-  };
-
-  // Auto Repair / Assign standard verified high-resolution food images for all categories
-  const handleAutoRepairAllCategories = async () => {
-    setIsAutoRepairing(true);
-    try {
-      let updatedCount = 0;
-      for (const cat of categories) {
-        const visual = getCategoryVisual(cat.name);
-        // Only update if image_url is missing or points to the old broken storage paths
-        const isBroken =
-          !cat.image_url ||
-          cat.image_url.includes('sections/1793') ||
-          cat.image_url.includes('ffoeosleputnezuafpcu');
-
-        if (isBroken && visual.defaultImg) {
-          const { error } = await supabase
-            .from('store_categories')
-            .update({ image_url: visual.defaultImg })
-            .eq('id', cat.id);
-          if (!error) updatedCount++;
-        }
-      }
-
-      notify(`تم إصلاح وتعيين صور عالية الجودة لـ (${updatedCount}) قسم بنجاح!`);
-      setShowAutoRepairConfirm(false);
-      await onReload();
-    } catch (err) {
-      notify(err instanceof Error ? err.message : 'فشل إصلاح الصور', 'error');
-    } finally {
-      setIsAutoRepairing(false);
-    }
-  };
-
-  // Sync All Images to App Gallery (makes them all available to the mobile app)
-  const [isSyncingAll, setIsSyncingAll] = useState(false);
-  const handleSyncAllToAppGallery = async () => {
-    setIsSyncingAll(true);
-    try {
-      let added = 0;
-      const existingTitles = new Set(
-        galleryItems.map((g) => g.title.trim().toLowerCase())
-      );
-
-      // 1. Sync Categories to app_gallery
-      for (const cat of categories) {
-        const title = cat.name.trim();
-        if (!existingTitles.has(title.toLowerCase())) {
-          const visual = getCategoryVisual(title);
-          const url = cat.image_url && !cat.image_url.includes('sections/1793')
-            ? cat.image_url
-            : visual.defaultImg;
-
-          const { error } = await supabase.from('app_gallery').insert({
-            title: title,
-            category: title,
-            image_url: url,
-            is_active: true,
-            position: 10,
-          });
-          if (!error) {
-            existingTitles.add(title.toLowerCase());
-            added++;
-          }
-        }
-      }
-
-      // 2. Sync distinct Products to app_gallery
-      for (const prod of products) {
-        const title = prod.name.trim();
-        if (!existingTitles.has(title.toLowerCase())) {
-          const visual = getCategoryVisual(title);
-          const url = prod.image_url && !prod.image_url.includes('goods/1793')
-            ? prod.image_url
-            : visual.defaultImg;
-          const cat = prod.category_id ? categoriesMap.get(prod.category_id) : null;
-
-          const { error } = await supabase.from('app_gallery').insert({
-            title: title,
-            category: cat?.name || 'مواد غذائية',
-            image_url: url,
-            is_active: true,
-            position: 20,
-          });
-          if (!error) {
-            existingTitles.add(title.toLowerCase());
-            added++;
-          }
-        }
-      }
-
-      notify(`تمت مزامنة ونشر (${added}) صورة بنجاح في معرض صور التطبيق!`);
-      await onReload();
-    } catch (err) {
-      notify(err instanceof Error ? err.message : 'فشلت المزامنة', 'error');
-    } finally {
-      setIsSyncingAll(false);
     }
   };
 
@@ -1100,17 +1007,26 @@ export function GalleryPage({
       setUploadProgress({ current: i + 1, total: pendingItems.length });
 
       try {
-        const { publicUrl } = await uploadCatalogMedia(it.file, 'app_gallery');
+        const folder = isProductUploadMode ? 'app_gallery/products' : 'app_gallery/categories';
+        const { publicUrl } = await uploadCatalogMedia(it.file, folder);
         const isDaily =
           it.category.trim() === 'المشتريات اليومية' ||
           it.title.trim() === 'المشتريات اليومية';
 
+        const imageKey = isDaily ? 'daily' : isProductUploadMode ? 'product' : 'category';
+
         const { error } = await supabase.from('app_gallery').insert({
-          title: it.title.trim() || (isDaily ? 'المشتريات اليومية' : 'صورة مادة'),
-          category: it.category.trim() || 'عام',
+          title:
+            it.title.trim() ||
+            (isDaily
+              ? 'المشتريات اليومية'
+              : isProductUploadMode
+              ? 'صورة مادة'
+              : 'صورة قسم'),
+          category: it.category.trim() || (isProductUploadMode ? 'مواد غذائية' : 'عام'),
           image_url: publicUrl,
-          image_key: isDaily ? 'daily' : null,
-          position: isDaily ? -1 : 0,
+          image_key: imageKey,
+          position: isDaily ? -1 : isProductUploadMode ? 20 : 10,
           is_active: true,
         });
 
@@ -1279,11 +1195,9 @@ export function GalleryPage({
             }}
             style={{ minWidth: 160 }}
           >
-            <option value="all">كل المصادر ({sourceCounts.all})</option>
-            <option value="gallery">معرض التطبيق العام ({sourceCounts.gallery})</option>
-            <option value="categories">صور الأقسام ({sourceCounts.categories})</option>
+            <option value="all">كل الصور ({sourceCounts.all})</option>
             <option value="products">صور المواد والمنتجات ({sourceCounts.products})</option>
-            <option value="knowledge">موسوعة المواد ({sourceCounts.knowledge})</option>
+            <option value="categories">صور الأقسام ({sourceCounts.categories})</option>
           </select>
 
           {/* Category Dropdown */}
@@ -1333,42 +1247,6 @@ export function GalleryPage({
 
         {/* Action Buttons */}
         <div className="toolbar-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {/* Sync All to Mobile App Gallery */}
-          <button
-            type="button"
-            className="btn btn-outline"
-            style={{
-              borderColor: '#7c3aed',
-              color: '#7c3aed',
-              background: '#faf5ff',
-              fontWeight: 700,
-            }}
-            title="نشر ومزامنة كافة صور المواد والأقسام مع تطبيق الهاتف"
-            onClick={handleSyncAllToAppGallery}
-            disabled={isSyncingAll}
-          >
-            <Sparkles size={15} />
-            {isSyncingAll ? 'جاري المزامنة...' : 'مزامنة الصور مع تطبيق الهاتف'}
-          </button>
-
-          {/* Smart Auto Repair Button */}
-          <button
-            type="button"
-            className="btn btn-outline"
-            style={{
-              borderColor: '#10b981',
-              color: '#047857',
-              background: '#ecfdf5',
-              fontWeight: 700,
-            }}
-            title="إصلاح الروابط المعطلة وتعيين صور عالية الجودة للأقسام تلقائياً"
-            onClick={() => setShowAutoRepairConfirm(true)}
-            disabled={isAutoRepairing}
-          >
-            <Wand2 size={15} />
-            إصلاح وتعيين صور الأقسام تلقائياً
-          </button>
-
           <button
             type="button"
             className="btn btn-outline"
@@ -1413,7 +1291,7 @@ export function GalleryPage({
             }}
           >
             <Package size={15} />
-            إضافة صور للمواد
+            إضافة صور للمواد من الجهاز
           </button>
 
           <button
@@ -1428,7 +1306,7 @@ export function GalleryPage({
             }}
           >
             <Upload size={15} />
-            رفع صور من الجهاز
+            إضافة صور للأقسام من الجهاز
           </button>
         </div>
       </div>
@@ -1445,11 +1323,9 @@ export function GalleryPage({
         }}
       >
         {[
-          { key: 'all', label: 'الكل', count: sourceCounts.all, icon: Layers },
-          { key: 'categories', label: 'صور الأقسام', count: sourceCounts.categories, icon: FolderPlus },
           { key: 'products', label: 'صور المواد والمنتجات', count: sourceCounts.products, icon: Package },
-          { key: 'gallery', label: 'معرض التطبيق العام', count: sourceCounts.gallery, icon: ImageIcon },
-          { key: 'knowledge', label: 'موسوعة المواد', count: sourceCounts.knowledge, icon: BookOpen },
+          { key: 'categories', label: 'صور الأقسام', count: sourceCounts.categories, icon: FolderPlus },
+          { key: 'all', label: 'الكل', count: sourceCounts.all, icon: Layers },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = sourceFilter === tab.key;
@@ -2133,18 +2009,6 @@ export function GalleryPage({
             </div>
           </div>
         </div>
-      )}
-
-      {/* Auto Repair Confirmation Modal */}
-      {showAutoRepairConfirm && (
-        <ConfirmModal
-          open={showAutoRepairConfirm}
-          title="إصلاح وتعيين صور الأقسام عالية الدقة تلقائياً"
-          message="سيتم فحص جميع الأقسام التي تملك روابط صور تالفة أو فارغة، وتعيين صور حقيقية عالية الجودة لها تلقائياً بحسب نوع كل قسم (ألبان، أجبان، أرز وحبوب، لحوم، دجاج، خضار، فواكه...). هل تريد الاستمرار؟"
-          busy={isAutoRepairing}
-          onConfirm={handleAutoRepairAllCategories}
-          onCancel={() => setShowAutoRepairConfirm(false)}
-        />
       )}
 
       {/* Edit Modal (مع إمكانية تعديل البيانات وتغيير الصورة من الجهاز) */}
