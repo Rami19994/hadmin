@@ -256,16 +256,6 @@ export function ProductsPage({
         image_url: editing.image_url.trim() || null,
         image_key: editing.image_key.trim() || null,
         extra_units: editing.extra_units.filter((u) => u.unit.trim() !== ''),
-        classification: editing.classification?.trim() || null,
-        nutrition_per_100g: editing.nutrition_per_100g?.trim() || null,
-        calories_per_100g: editing.calories_per_100g?.trim() || null,
-        fiber_per_100g: editing.fiber_per_100g?.trim() || null,
-        vitamins_minerals: editing.vitamins_minerals?.trim() || null,
-        health_benefits: editing.health_benefits?.trim() || null,
-        warnings: editing.warnings?.trim() || null,
-        uses: editing.uses?.trim() || null,
-        origin: editing.origin?.trim() || null,
-        storage_method: editing.storage_method?.trim() || null,
       };
 
       if (editing.id) {

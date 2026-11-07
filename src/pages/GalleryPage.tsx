@@ -690,34 +690,35 @@ export function GalleryPage({
   const handleQuickUpload = async (item: UnifiedImageItem, file: File) => {
     try {
       notify(`جاري رفع صورة «${item.title}» من جهازك...`);
-      const folder =
-        item.source === 'category'
-          ? 'categories'
-          : item.source === 'product'
-          ? 'products'
-          : 'app_gallery';
+      const folder = item.id.startsWith('gallery-')
+        ? 'app_gallery'
+        : item.id.startsWith('cat-')
+        ? 'categories'
+        : item.id.startsWith('prod-')
+        ? 'products'
+        : 'app_gallery';
 
       const { publicUrl } = await uploadCatalogMedia(file, folder);
 
-      if (item.source === 'category') {
-        const { error } = await supabase
-          .from('store_categories')
-          .update({ image_url: publicUrl })
-          .eq('id', item.rawId);
-        if (error) throw error;
-      } else if (item.source === 'product') {
-        const { error } = await supabase
-          .from('products')
-          .update({ image_url: publicUrl })
-          .eq('id', item.rawId);
-        if (error) throw error;
-      } else if (item.source === 'gallery') {
+      if (item.id.startsWith('gallery-')) {
         const { error } = await supabase
           .from('app_gallery')
           .update({ image_url: publicUrl })
           .eq('id', item.rawId);
         if (error) throw error;
-      } else if (item.source === 'knowledge') {
+      } else if (item.id.startsWith('cat-')) {
+        const { error } = await supabase
+          .from('store_categories')
+          .update({ image_url: publicUrl })
+          .eq('id', item.rawId);
+        if (error) throw error;
+      } else if (item.id.startsWith('prod-')) {
+        const { error } = await supabase
+          .from('products')
+          .update({ image_url: publicUrl })
+          .eq('id', item.rawId);
+        if (error) throw error;
+      } else if (item.id.startsWith('know-')) {
         const { error } = await supabase
           .from('product_knowledge')
           .update({ image_url: publicUrl })
@@ -736,25 +737,25 @@ export function GalleryPage({
   const handleToggleActive = async (item: UnifiedImageItem) => {
     const nextState = !item.isActive;
     try {
-      if (item.source === 'gallery') {
+      if (item.id.startsWith('gallery-')) {
         const { error } = await supabase
           .from('app_gallery')
           .update({ is_active: nextState })
           .eq('id', item.rawId);
         if (error) throw error;
-      } else if (item.source === 'category') {
+      } else if (item.id.startsWith('cat-')) {
         const { error } = await supabase
           .from('store_categories')
           .update({ is_hidden: !nextState })
           .eq('id', item.rawId);
         if (error) throw error;
-      } else if (item.source === 'product') {
+      } else if (item.id.startsWith('prod-')) {
         const { error } = await supabase
           .from('products')
           .update({ available: nextState })
           .eq('id', item.rawId);
         if (error) throw error;
-      } else if (item.source === 'knowledge') {
+      } else if (item.id.startsWith('know-')) {
         notify('عناصر موسوعة المواد نشطة بشكل افتراضي');
         return;
       }
@@ -772,7 +773,7 @@ export function GalleryPage({
 
   // Publish / Promote item image to General App Gallery
   const handlePublishToAppGallery = async (item: UnifiedImageItem) => {
-    if (item.source === 'gallery') {
+    if (item.id.startsWith('gallery-')) {
       notify('هذه الصورة موجودة بالفعل في المعرض العام');
       return;
     }
@@ -876,17 +877,18 @@ export function GalleryPage({
       let finalImageUrl = editImageUrl;
 
       if (editImageFile) {
-        const folder =
-          editingItem.source === 'category'
-            ? 'categories'
-            : editingItem.source === 'product'
-            ? 'products'
-            : 'app_gallery';
+        const folder = editingItem.id.startsWith('gallery-')
+          ? 'app_gallery'
+          : editingItem.id.startsWith('cat-')
+          ? 'categories'
+          : editingItem.id.startsWith('prod-')
+          ? 'products'
+          : 'app_gallery';
         const { publicUrl } = await uploadCatalogMedia(editImageFile, folder);
         finalImageUrl = publicUrl;
       }
 
-      if (editingItem.source === 'gallery') {
+      if (editingItem.id.startsWith('gallery-')) {
         const isDaily =
           editTargetType === 'daily' ||
           finalCategory === 'المشتريات اليومية' ||
@@ -911,7 +913,7 @@ export function GalleryPage({
           .eq('id', editingItem.rawId);
 
         if (error) throw error;
-      } else if (editingItem.source === 'category') {
+      } else if (editingItem.id.startsWith('cat-')) {
         const { error } = await supabase
           .from('store_categories')
           .update({
@@ -922,24 +924,21 @@ export function GalleryPage({
           .eq('id', editingItem.rawId);
 
         if (error) throw error;
-      } else if (editingItem.source === 'product') {
+      } else if (editingItem.id.startsWith('prod-')) {
         const { error } = await supabase
           .from('products')
           .update({
             name: editTitle.trim() || editingItem.title,
             name_en: editNameEn.trim() || null,
             image_url: finalImageUrl,
-            classification: finalCategory,
             price: typeof editPrice === 'number' ? editPrice : Number(editPrice) || 0,
             unit: editUnit.trim() || 'قطعة',
-            origin: editOrigin.trim() || null,
-            calories_per_100g: editCalories.trim() || null,
             available: editIsActive,
           })
           .eq('id', editingItem.rawId);
 
         if (error) throw error;
-      } else if (editingItem.source === 'knowledge') {
+      } else if (editingItem.id.startsWith('know-')) {
         const { error } = await supabase
           .from('product_knowledge')
           .update({
