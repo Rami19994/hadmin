@@ -292,6 +292,8 @@ export interface OrderRow {
   created_at: string;
   approved_at: string | null;
   delivered_at: string | null;
+  delivery_code_requested_at?: string | null;
+  consumer_hidden?: boolean;
   order_items?: OrderItemRow[];
 }
 

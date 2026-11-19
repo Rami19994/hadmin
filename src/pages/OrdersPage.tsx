@@ -517,8 +517,14 @@ export function OrdersPage({
                         </option>
                       ))}
                     </select>
-                    <div style={{ marginTop: 4 }}>
+                    <div style={{ marginTop: 4, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                       <span className={`badge ${stMeta.badgeClass}`}>{stMeta.label}</span>
+                      {ord.delivery_code_requested_at && (
+                        <span className="badge badge-amber">طلب كود التسليم</span>
+                      )}
+                      {ord.consumer_hidden && (
+                        <span className="badge badge-slate">مخفي لدى الزبون</span>
+                      )}
                     </div>
                   </td>
                   <td style={{ fontSize: 12, color: '#64748b' }}>
@@ -732,6 +738,18 @@ export function OrdersPage({
             </div>
 
             <div className="modal-body">
+              {(activeOrder.delivery_code_requested_at || activeOrder.consumer_hidden) && (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+                  {activeOrder.delivery_code_requested_at && (
+                    <span className="badge badge-amber">
+                      تم طلب كود التسليم: {formatDateTime(activeOrder.delivery_code_requested_at)}
+                    </span>
+                  )}
+                  {activeOrder.consumer_hidden && (
+                    <span className="badge badge-slate">أخفى الزبون الفاتورة من حسابه</span>
+                  )}
+                </div>
+              )}
               {/* Header Form */}
               <form onSubmit={handleSaveHeader} style={{ marginBottom: 22 }}>
                 <div className="form-grid-3">
