@@ -28,7 +28,7 @@ import {
   profileDisplayName,
 } from '../lib/constants';
 import { supabase } from '../lib/supabase';
-import { ConfirmModal, useToast } from '../components/ToastContext';
+import { useToast } from '../components/ToastContext';
 
 function confirmationCodeFor(id: string): string {
   let hash = 0;
@@ -61,8 +61,6 @@ export function OrdersPage({
 
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [savingHeader, setSavingHeader] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<OrderRow | null>(null);
-  const [deleting, setDeleting] = useState(false);
 
   // New Order Creation Modal
   const [creatingOrder, setCreatingOrder] = useState(false);
@@ -308,23 +306,6 @@ export function OrdersPage({
     if (data) openInvoice(data as OrderRow);
   };
 
-  const handleDeleteOrder = async () => {
-    if (!deleteTarget) return;
-    setDeleting(true);
-    try {
-      const { error } = await supabase.from('orders').delete().eq('id', deleteTarget.id);
-      if (error) throw error;
-      notify('تم حذف الفاتورة وجميع بنودها نهائياً');
-      if (activeOrderId === deleteTarget.id) setActiveOrderId(null);
-      setDeleteTarget(null);
-      await onReload();
-    } catch (err) {
-      notify(err instanceof Error ? err.message : 'تعذر حذف الطلب', 'error');
-    } finally {
-      setDeleting(false);
-    }
-  };
-
   const activeStoreProducts = useMemo(
     () => (activeOrder ? products.filter((p) => p.store_id === activeOrder.store_id) : []),
     [products, activeOrder]
@@ -451,15 +432,59 @@ export function OrdersPage({
                   </td>
                   <td style={{ fontWeight: 700 }}>{st?.name || ord.store_id.slice(0, 8)}</td>
                   <td>
-                    <div style={{ fontWeight: 800 }}>{ord.customer_name || 'زبون'}</div>
-                    {ord.customer_phone && (
-                      <div style={{ fontSize: 12, color: '#475569' }} dir="ltr">
-                        {ord.customer_phone}
-                      </div>
-                    )}
-                    <div style={{ fontSize: 11.5, color: '#64748b' }}>
-                      {ord.address.slice(0, 48)}
-                    </div>
+                    {(() => {
+                      const avatarUrl =
+                        (ord.consumer_id ? profileMap.get(ord.consumer_id)?.photo_url : null) ||
+                        ord.customer_photo_url ||
+                        null;
+                      return (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          {avatarUrl ? (
+                            <img
+                              src={avatarUrl}
+                              alt={ord.customer_name || 'زبون'}
+                              style={{
+                                width: 34,
+                                height: 34,
+                                borderRadius: '50%',
+                                objectFit: 'cover',
+                                border: '1px solid #cbd5e1',
+                                flexShrink: 0,
+                              }}
+                            />
+                          ) : (
+                            <div
+                              style={{
+                                width: 34,
+                                height: 34,
+                                borderRadius: '50%',
+                                background: '#e2e8f0',
+                                color: '#475569',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: 800,
+                                fontSize: 13,
+                                flexShrink: 0,
+                              }}
+                            >
+                              {(ord.customer_name || 'ز').trim().charAt(0)}
+                            </div>
+                          )}
+                          <div>
+                            <div style={{ fontWeight: 800 }}>{ord.customer_name || 'زبون'}</div>
+                            {ord.customer_phone && (
+                              <div style={{ fontSize: 12, color: '#475569' }} dir="ltr">
+                                {ord.customer_phone}
+                              </div>
+                            )}
+                            <div style={{ fontSize: 11.5, color: '#64748b' }}>
+                              {ord.address.slice(0, 48)}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td>
                     <div style={{ fontWeight: 600 }}>
@@ -507,13 +532,6 @@ export function OrdersPage({
                         onClick={() => openInvoice(ord)}
                       >
                         <ReceiptText size={14} /> الفاتورة والبنود
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-danger btn-sm"
-                        onClick={() => setDeleteTarget(ord)}
-                      >
-                        <Trash2 size={14} />
                       </button>
                     </div>
                   </td>
@@ -1108,15 +1126,6 @@ export function OrdersPage({
           </div>
         </div>
       )}
-
-      <ConfirmModal
-        open={Boolean(deleteTarget)}
-        title="حذف الفاتورة نهائياً"
-        message={`هل أنت متأكد من حذف الطلب #${deleteTarget?.id.slice(0, 8)} وجميع بنوده نهائياً من قاعدة البيانات؟`}
-        busy={deleting}
-        onConfirm={handleDeleteOrder}
-        onCancel={() => setDeleteTarget(null)}
-      />
     </div>
   );
 }

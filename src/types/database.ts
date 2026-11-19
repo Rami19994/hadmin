@@ -164,6 +164,7 @@ export interface ProductRow {
   image_key: string | null;
   image_url: string | null;
   source: string | null;
+  details?: string | null;
   extra_units: ProductExtraUnit[];
   classification?: string | null;
   nutrition_per_100g?: string | null;
@@ -229,6 +230,7 @@ export interface PromotionRow {
   currency: string;
   media_key: string | null;
   media_url: string | null;
+  extra_media_urls?: string[];
   media_type: string;
   artwork_has_prices: boolean;
   expiry_mode: PromotionExpiryMode;
@@ -279,6 +281,7 @@ export interface OrderRow {
   address: string;
   customer_name: string | null;
   customer_phone: string | null;
+  customer_photo_url?: string | null;
   note: string | null;
   merchant_note: string | null;
   rejection_reason: string | null;

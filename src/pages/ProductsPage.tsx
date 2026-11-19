@@ -34,6 +34,7 @@ interface ProductFormState {
   available: boolean;
   position: string;
   source: string;
+  details: string;
   image_url: string;
   image_key: string;
   extra_units: ProductExtraUnit[];
@@ -102,6 +103,7 @@ export function ProductsPage({
         p.name,
         p.name_en || '',
         p.source || '',
+        p.details || '',
         p.unit,
         st?.name || '',
         cat?.name || '',
@@ -126,6 +128,7 @@ export function ProductsPage({
       available: true,
       position: String(filtered.length),
       source: '',
+      details: '',
       image_url: '',
       image_key: '',
       extra_units: [],
@@ -155,6 +158,7 @@ export function ProductsPage({
       available: Boolean(p.available),
       position: String(p.position ?? 0),
       source: p.source || '',
+      details: p.details || '',
       image_url: p.image_url || '',
       image_key: p.image_key || '',
       extra_units: Array.isArray(p.extra_units) ? p.extra_units : [],
@@ -199,6 +203,7 @@ export function ProductsPage({
       image_key: p.image_key,
       image_url: p.image_url,
       source: p.source,
+      details: p.details ?? null,
       extra_units: p.extra_units || [],
     });
     if (error) {
@@ -252,22 +257,30 @@ export function ProductsPage({
         quantity: Number(editing.quantity || 0),
         available: editing.available,
         position: Number(editing.position || 0),
-        source: editing.source.trim() || null,
+        source: editing.source.trim().slice(0, 200) || null,
+        details: editing.details.trim() === '' ? null : editing.details,
         image_url: editing.image_url.trim() || null,
         image_key: editing.image_key.trim() || null,
         extra_units: editing.extra_units.filter((u) => u.unit.trim() !== ''),
       };
 
-      if (editing.id) {
-        const { error } = await supabase
-          .from('products')
-          .update(payload)
-          .eq('id', editing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from('products').insert(payload);
-        if (error) throw error;
+      const saveProduct = async (rowPayload: typeof payload) => {
+        if (editing.id) {
+          return await supabase
+            .from('products')
+            .update(rowPayload)
+            .eq('id', editing.id);
+        }
+        return await supabase.from('products').insert(rowPayload);
+      };
+
+      let { error } = await saveProduct(payload);
+      if (error && error.message?.toLowerCase().includes('details')) {
+        const { details: _ignored, ...fallbackPayload } = payload;
+        const retry = await saveProduct(fallbackPayload as typeof payload);
+        error = retry.error;
       }
+      if (error) throw error;
 
       // حفظ تلقائي أو تحديث في موسوعة المواد لتعميم المعلومات
       if (editing.name.trim()) {
@@ -545,6 +558,20 @@ export function ProductsPage({
                         المصدر: {p.source}
                       </div>
                     )}
+                    {p.details && (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: '#64748b',
+                          maxWidth: 240,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {p.details}
+                      </div>
+                    )}
                   </td>
                   <td>
                     <div style={{ fontWeight: 700 }}>{st?.name || '—'}</div>
@@ -771,13 +798,48 @@ export function ProductsPage({
                   </div>
 
                   <div className="field">
-                    <label>معلومات المصدر / المنشأ (تظهر تحت السعر في صفحة المادة)</label>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: 8,
+                      }}
+                    >
+                      <label style={{ margin: 0 }}>
+                        معلومات المصدر / المنشأ (تظهر تحت السعر في صفحة المادة)
+                      </label>
+                      <span style={{ fontSize: 11.5, color: '#64748b' }}>
+                        {editing.source.length}/200
+                      </span>
+                    </div>
                     <input
                       type="text"
                       className="input"
+                      maxLength={200}
                       placeholder="مثلاً: الأردن / إنتاج محلي / مستورد..."
                       value={editing.source}
-                      onChange={(e) => setEditing({ ...editing, source: e.target.value })}
+                      onChange={(e) =>
+                        setEditing({ ...editing, source: e.target.value.slice(0, 200) })
+                      }
+                    />
+                  </div>
+
+                  <div className="field col-span-2">
+                    <label>
+                      معلومات المادة (نص مفتوح بدون حد للأحرف — يحافظ على تنسيق النص عند اللصق)
+                    </label>
+                    <textarea
+                      className="textarea"
+                      rows={5}
+                      style={{
+                        whiteSpace: 'pre-wrap',
+                        fontFamily: 'inherit',
+                        lineHeight: 1.6,
+                      }}
+                      placeholder="اكتب أو الصق تفاصيل المادة، المواصفات، المكونات، وطريقة الاستخدام كما هي..."
+                      value={editing.details}
+                      onChange={(e) => setEditing({ ...editing, details: e.target.value })}
                     />
                   </div>
 

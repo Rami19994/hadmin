@@ -7,6 +7,7 @@ import {
   Eye,
   EyeOff,
   X,
+  Upload,
 } from 'lucide-react';
 import type {
   PromotionAfterExpiry,
@@ -23,7 +24,7 @@ import {
   PROMOTION_STATUS_META,
   toLocalDatetimeInput,
 } from '../lib/constants';
-import { supabase } from '../lib/supabase';
+import { supabase, uploadCatalogMedia } from '../lib/supabase';
 import { ConfirmModal, ImageUploadField, useToast } from '../components/ToastContext';
 
 interface PromoFormState {
@@ -36,6 +37,7 @@ interface PromoFormState {
   old_price: string;
   currency: string;
   media_url: string;
+  extra_media_urls: string[];
   media_type: string;
   artwork_has_prices: boolean;
   expiry_mode: PromotionExpiryMode;
@@ -69,6 +71,8 @@ export function PromotionsPage({
 
   const [editing, setEditing] = useState<PromoFormState | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploadingExtra, setUploadingExtra] = useState(false);
+  const [extraUrlInput, setExtraUrlInput] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<PromotionRow | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -104,6 +108,7 @@ export function PromotionsPage({
       old_price: '',
       currency: st?.currency || 'ل.س',
       media_url: '',
+      extra_media_urls: [],
       media_type: 'image',
       artwork_has_prices: false,
       expiry_mode: 'date',
@@ -130,6 +135,9 @@ export function PromotionsPage({
       old_price: p.old_price !== null && p.old_price !== undefined ? String(p.old_price) : '',
       currency: p.currency || 'ل.س',
       media_url: p.media_url || '',
+      extra_media_urls: Array.isArray(p.extra_media_urls)
+        ? p.extra_media_urls.filter((u): u is string => typeof u === 'string' && u.trim() !== '')
+        : [],
       media_type: p.media_type || 'image',
       artwork_has_prices: Boolean(p.artwork_has_prices),
       expiry_mode: p.expiry_mode || 'date',
@@ -184,6 +192,10 @@ export function PromotionsPage({
         old_price: editing.old_price.trim() !== '' ? Number(editing.old_price) : null,
         currency: editing.currency.trim() || storeMap.get(editing.store_id)?.currency || 'ل.س',
         media_url: editing.media_url.trim() || null,
+        extra_media_urls: editing.extra_media_urls
+          .map((u) => u.trim())
+          .filter((u) => u.length > 0 && u !== editing.media_url.trim())
+          .slice(0, 6),
         media_type: editing.media_type || 'image',
         artwork_has_prices: editing.artwork_has_prices,
         expiry_mode: editing.expiry_mode,
@@ -202,16 +214,23 @@ export function PromotionsPage({
           editing.status === 'published' ? new Date().toISOString() : null,
       };
 
-      if (editing.id) {
-        const { error } = await supabase
-          .from('promotions')
-          .update(payload)
-          .eq('id', editing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from('promotions').insert(payload);
-        if (error) throw error;
+      const savePromotion = async (rowPayload: typeof payload) => {
+        if (editing.id) {
+          return await supabase
+            .from('promotions')
+            .update(rowPayload)
+            .eq('id', editing.id);
+        }
+        return await supabase.from('promotions').insert(rowPayload);
+      };
+
+      let { error } = await savePromotion(payload);
+      if (error && error.message?.toLowerCase().includes('extra_media_urls')) {
+        const { extra_media_urls: _ignored, ...fallbackPayload } = payload;
+        const retry = await savePromotion(fallbackPayload as typeof payload);
+        error = retry.error;
       }
+      if (error) throw error;
 
       notify(editing.id ? 'تم حفظ تعديلات العرض/التخفيض' : 'تم إنشاء العرض/التخفيض بنجاح');
       setEditing(null);
@@ -706,6 +725,156 @@ export function PromotionsPage({
                       onChange={(url) => setEditing({ ...editing, media_url: url })}
                       folderPath={`${editing.store_id || 'admin'}/promotions`}
                     />
+                  </div>
+
+                  <div className="col-span-2 field">
+                    <label>
+                      صور إضافية للعرض ({editing.extra_media_urls.length}/6 — تظهر بالتنقل الأفقي داخل العرض)
+                    </label>
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: 10,
+                        alignItems: 'center',
+                      }}
+                    >
+                      {editing.extra_media_urls.map((url, idx) => (
+                        <div
+                          key={`${url}-${idx}`}
+                          style={{
+                            position: 'relative',
+                            width: 72,
+                            height: 72,
+                            borderRadius: 10,
+                            overflow: 'hidden',
+                            border: '1px solid #cbd5e1',
+                            background: '#fff',
+                          }}
+                        >
+                          <img
+                            src={url}
+                            alt={`صورة إضافية ${idx + 1}`}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditing({
+                                ...editing,
+                                extra_media_urls: editing.extra_media_urls.filter(
+                                  (_, i) => i !== idx
+                                ),
+                              })
+                            }
+                            title="حذف الصورة"
+                            style={{
+                              position: 'absolute',
+                              top: 4,
+                              right: 4,
+                              width: 22,
+                              height: 22,
+                              borderRadius: '50%',
+                              border: 'none',
+                              background: 'rgba(15, 23, 42, 0.78)',
+                              color: '#fff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+
+                      {editing.extra_media_urls.length < 6 && (
+                        <label
+                          className="btn btn-outline btn-sm"
+                          style={{ cursor: uploadingExtra ? 'wait' : 'pointer' }}
+                        >
+                          <Upload size={14} />
+                          {uploadingExtra ? 'جاري الرفع...' : 'رفع صور إضافية'}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            style={{ display: 'none' }}
+                            disabled={uploadingExtra}
+                            onChange={async (e) => {
+                              const files = Array.from(e.target.files || []);
+                              e.target.value = '';
+                              if (files.length === 0) return;
+                              const slotsLeft = 6 - editing.extra_media_urls.length;
+                              const toUpload = files.slice(0, slotsLeft);
+                              setUploadingExtra(true);
+                              try {
+                                const uploaded: string[] = [];
+                                for (const file of toUpload) {
+                                  const { publicUrl } = await uploadCatalogMedia(
+                                    file,
+                                    `${editing.store_id || 'admin'}/promotions/extra`
+                                  );
+                                  uploaded.push(publicUrl);
+                                }
+                                setEditing((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        extra_media_urls: [
+                                          ...prev.extra_media_urls,
+                                          ...uploaded,
+                                        ].slice(0, 6),
+                                      }
+                                    : prev
+                                );
+                                notify(`تم رفع ${uploaded.length} صورة إضافية بنجاح`);
+                              } catch (err) {
+                                notify(
+                                  err instanceof Error ? err.message : 'فشل رفع الصور الإضافية',
+                                  'error'
+                                );
+                              } finally {
+                                setUploadingExtra(false);
+                              }
+                            }}
+                          />
+                        </label>
+                      )}
+                    </div>
+
+                    {editing.extra_media_urls.length < 6 && (
+                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                        <input
+                          type="url"
+                          className="input"
+                          dir="ltr"
+                          placeholder="أو الصق رابط صورة إضافية https://..."
+                          value={extraUrlInput}
+                          onChange={(e) => setExtraUrlInput(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          onClick={() => {
+                            const trimmed = extraUrlInput.trim();
+                            if (!trimmed) return;
+                            if (editing.extra_media_urls.includes(trimmed)) {
+                              setExtraUrlInput('');
+                              return;
+                            }
+                            setEditing({
+                              ...editing,
+                              extra_media_urls: [...editing.extra_media_urls, trimmed].slice(0, 6),
+                            });
+                            setExtraUrlInput('');
+                          }}
+                        >
+                          <Plus size={14} /> إضافة رابط
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

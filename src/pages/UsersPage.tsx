@@ -244,13 +244,37 @@ export function UsersPage({
         }
       }
 
-      if (editing.newPassword.trim() && serverApiReady) {
-        await callServerAdminApi({
-          action: 'update_auth',
-          user_id: editing.id,
-          password: editing.newPassword.trim(),
-          email: editing.email.trim() || undefined,
-        });
+      if (editing.newPassword.trim()) {
+        let pwUpdated = false;
+        try {
+          const { error: rpcErr } = await supabase.rpc('admin_set_user_password', {
+            target_user_id: editing.id,
+            new_password: editing.newPassword.trim(),
+          });
+          if (!rpcErr) {
+            pwUpdated = true;
+          }
+        } catch (_) {}
+
+        if (!pwUpdated && serverApiReady) {
+          try {
+            await callServerAdminApi({
+              action: 'update_auth',
+              user_id: editing.id,
+              password: editing.newPassword.trim(),
+              email: editing.email.trim() || undefined,
+            });
+            pwUpdated = true;
+          } catch (apiErr) {
+            notify(
+              `فشل تحديث كلمة المرور: ${apiErr instanceof Error ? apiErr.message : String(apiErr)}`,
+              'error'
+            );
+          }
+        }
+        if (pwUpdated) {
+          notify('تم تعيين كلمة مرور جديدة للمستخدم بنجاح');
+        }
       }
 
       notify('تم حفظ تعديلات الملف الشخصي والصلاحيات بنجاح');
@@ -445,12 +469,51 @@ export function UsersPage({
               return (
                 <tr key={p.id} className={p.is_suspended ? 'row-faded' : ''}>
                   <td>
-                    <div style={{ fontWeight: 800, fontSize: 14 }}>
-                      {profileDisplayName(p)}
-                    </div>
-                    <div style={{ display: 'flex', gap: 5, marginTop: 3 }}>
-                      {isGuest && <span className="badge badge-slate">ضيف</span>}
-                      {p.is_suspended && <span className="badge badge-red">موقوف</span>}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      {p.photo_url ? (
+                        <img
+                          src={p.photo_url}
+                          alt=""
+                          style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: '50%',
+                            objectFit: 'cover',
+                            border: '1px solid #cbd5e1',
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: '50%',
+                            background: '#e2e8f0',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 13,
+                            fontWeight: 800,
+                            color: '#64748b',
+                          }}
+                        >
+                          {(p.first_name_ar || p.first_name_en || 'U')[0]}
+                        </div>
+                      )}
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: 13.5 }}>
+                          {profileDisplayName(p)}
+                        </div>
+                        {[p.first_name_en, p.last_name_en].filter(Boolean).join(' ').trim() && (
+                          <div style={{ fontSize: 11, color: '#64748b' }}>
+                            {[p.first_name_en, p.last_name_en].filter(Boolean).join(' ').trim()}
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', gap: 5, marginTop: 2 }}>
+                          {isGuest && <span className="badge badge-slate">ضيف</span>}
+                          {p.is_suspended && <span className="badge badge-red">موقوف</span>}
+                        </div>
+                      </div>
                     </div>
                   </td>
                   <td>
@@ -862,21 +925,22 @@ export function UsersPage({
                     />
                   </div>
 
-                  {serverApiReady && (
-                    <div className="field">
-                      <label>تعيين كلمة مرور جديدة (اختياري)</label>
-                      <input
-                        type="password"
-                        className="input"
-                        dir="ltr"
-                        placeholder="اتركه فارغاً لعدم التغيير"
-                        value={editing.newPassword}
-                        onChange={(e) =>
-                          setEditing({ ...editing, newPassword: e.target.value })
-                        }
-                      />
-                    </div>
-                  )}
+                  <div className="field">
+                    <label>تعيين كلمة مرور جديدة للمستخدم (لدعم العملاء)</label>
+                    <input
+                      type="password"
+                      className="input"
+                      dir="ltr"
+                      placeholder="اتركه فارغاً لعدم التغيير (6 خانات على الأقل)"
+                      value={editing.newPassword}
+                      onChange={(e) =>
+                        setEditing({ ...editing, newPassword: e.target.value })
+                      }
+                    />
+                    <span style={{ fontSize: 11, color: '#64748b' }}>
+                      يمكنك تعيين كلمة مرور جديدة إذا طلب العميل المساعدة في استعادة حسابه.
+                    </span>
+                  </div>
                 </div>
 
                 <div className="form-grid" style={{ marginTop: 14 }}>
@@ -938,6 +1002,7 @@ export function UsersPage({
                         <th>التسمية</th>
                         <th>المحافظة / المدينة</th>
                         <th>الشارع والبناء</th>
+                        <th>الخريطة</th>
                         <th>افتراضي</th>
                         <th>حذف</th>
                       </tr>
@@ -945,13 +1010,13 @@ export function UsersPage({
                     <tbody>
                       {loadingAddr ? (
                         <tr>
-                          <td colSpan={5} className="empty-state">
+                          <td colSpan={6} className="empty-state">
                             جاري التحميل...
                           </td>
                         </tr>
                       ) : addresses.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="empty-state">
+                          <td colSpan={6} className="empty-state">
                             لا توجد عناوين محفوظة لهذا المستخدم
                           </td>
                         </tr>
@@ -966,6 +1031,31 @@ export function UsersPage({
                               {[ad.street, ad.building, ad.floor && `ط ${ad.floor}`, ad.unit && `شقة ${ad.unit}`]
                                 .filter(Boolean)
                                 .join(' — ') || '—'}
+                            </td>
+                            <td>
+                              {ad.latitude && ad.longitude ? (
+                                <a
+                                  href={`https://www.google.com/maps/search/?api=1&query=${ad.latitude},${ad.longitude}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn btn-outline btn-sm"
+                                  style={{ padding: '2px 8px', fontSize: 11 }}
+                                >
+                                  🗺️ الخريطة ({ad.latitude.toFixed(3)}, {ad.longitude.toFixed(3)})
+                                </a>
+                              ) : ad.city || ad.street ? (
+                                <a
+                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([ad.province, ad.city, ad.street].filter(Boolean).join(' '))}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn btn-outline btn-sm"
+                                  style={{ padding: '2px 8px', fontSize: 11 }}
+                                >
+                                  بحث بالخريطة
+                                </a>
+                              ) : (
+                                '—'
+                              )}
                             </td>
                             <td>
                               {ad.is_default ? (
