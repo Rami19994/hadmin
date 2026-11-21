@@ -10,6 +10,7 @@ import {
   X,
   Layers,
   Images,
+  Upload,
 } from 'lucide-react';
 import type {
   ProductExtraUnit,
@@ -18,7 +19,7 @@ import type {
   StoreRow,
 } from '../types/database';
 import { formatMoney, PRODUCT_UNITS } from '../lib/constants';
-import { supabase } from '../lib/supabase';
+import { supabase, uploadCatalogMedia } from '../lib/supabase';
 import { ConfirmModal, ImageUploadField, useToast } from '../components/ToastContext';
 import { GalleryPickerModal } from '../components/GalleryPickerModal';
 
@@ -37,6 +38,7 @@ interface ProductFormState {
   details: string;
   image_url: string;
   image_key: string;
+  extra_image_urls: string[];
   extra_units: ProductExtraUnit[];
   classification?: string;
   nutrition_per_100g?: string;
@@ -73,6 +75,8 @@ export function ProductsPage({
   const [editing, setEditing] = useState<ProductFormState | null>(null);
   const [showGalleryPicker, setShowGalleryPicker] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploadingExtra, setUploadingExtra] = useState(false);
+  const [extraUrlInput, setExtraUrlInput] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<ProductRow | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -131,6 +135,7 @@ export function ProductsPage({
       details: '',
       image_url: '',
       image_key: '',
+      extra_image_urls: [],
       extra_units: [],
       classification: '',
       nutrition_per_100g: '',
@@ -161,6 +166,9 @@ export function ProductsPage({
       details: p.details || '',
       image_url: p.image_url || '',
       image_key: p.image_key || '',
+      extra_image_urls: Array.isArray(p.extra_image_urls)
+        ? p.extra_image_urls.filter((u): u is string => typeof u === 'string' && u.trim() !== '')
+        : [],
       extra_units: Array.isArray(p.extra_units) ? p.extra_units : [],
       classification: p.classification || '',
       nutrition_per_100g: p.nutrition_per_100g || '',
@@ -202,6 +210,7 @@ export function ProductsPage({
       position: (p.position || 0) + 1,
       image_key: p.image_key,
       image_url: p.image_url,
+      extra_image_urls: p.extra_image_urls || [],
       source: p.source,
       details: p.details ?? null,
       extra_units: p.extra_units || [],
@@ -261,10 +270,13 @@ export function ProductsPage({
         details: editing.details.trim() === '' ? null : editing.details,
         image_url: editing.image_url.trim() || null,
         image_key: editing.image_key.trim() || null,
+        extra_image_urls: editing.extra_image_urls
+          .map((u) => u.trim())
+          .filter((u) => u.length > 0 && u !== editing.image_url.trim()),
         extra_units: editing.extra_units.filter((u) => u.unit.trim() !== ''),
       };
 
-      const saveProduct = async (rowPayload: typeof payload) => {
+      const saveProduct = async (rowPayload: Record<string, unknown>) => {
         if (editing.id) {
           return await supabase
             .from('products')
@@ -274,11 +286,21 @@ export function ProductsPage({
         return await supabase.from('products').insert(rowPayload);
       };
 
-      let { error } = await saveProduct(payload);
-      if (error && error.message?.toLowerCase().includes('details')) {
-        const { details: _ignored, ...fallbackPayload } = payload;
-        const retry = await saveProduct(fallbackPayload as typeof payload);
-        error = retry.error;
+      const attemptPayload: Record<string, unknown> = { ...payload };
+      let error = (await saveProduct(attemptPayload)).error;
+      while (error) {
+        const msg = error.message?.toLowerCase() || '';
+        let stripped = false;
+        if (msg.includes('details') && 'details' in attemptPayload) {
+          delete attemptPayload.details;
+          stripped = true;
+        }
+        if (msg.includes('extra_image_urls') && 'extra_image_urls' in attemptPayload) {
+          delete attemptPayload.extra_image_urls;
+          stripped = true;
+        }
+        if (!stripped) break;
+        error = (await saveProduct(attemptPayload)).error;
       }
       if (error) throw error;
 
@@ -882,6 +904,150 @@ export function ProductsPage({
                       >
                         <Images size={14} />
                         اختيار صورة من معرض صور التطبيق
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="col-span-2 field">
+                    <label>
+                      صور إضافية للمادة ({editing.extra_image_urls.length} صورة — مفتوحة العدد، تظهر بالتنقل الأفقي وبالتكبير داخل صفحة المادة)
+                    </label>
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: 10,
+                        alignItems: 'center',
+                      }}
+                    >
+                      {editing.extra_image_urls.map((url, idx) => (
+                        <div
+                          key={`${url}-${idx}`}
+                          style={{
+                            position: 'relative',
+                            width: 72,
+                            height: 72,
+                            borderRadius: 10,
+                            overflow: 'hidden',
+                            border: '1px solid #cbd5e1',
+                            background: '#fff',
+                          }}
+                        >
+                          <img
+                            src={url}
+                            alt={`صورة إضافية ${idx + 1}`}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditing({
+                                ...editing,
+                                extra_image_urls: editing.extra_image_urls.filter(
+                                  (_, i) => i !== idx
+                                ),
+                              })
+                            }
+                            title="حذف الصورة"
+                            style={{
+                              position: 'absolute',
+                              top: 4,
+                              right: 4,
+                              width: 22,
+                              height: 22,
+                              borderRadius: '50%',
+                              border: 'none',
+                              background: 'rgba(15, 23, 42, 0.78)',
+                              color: '#fff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+
+                      <label
+                        className="btn btn-outline btn-sm"
+                        style={{ cursor: uploadingExtra ? 'wait' : 'pointer' }}
+                      >
+                        <Upload size={14} />
+                        {uploadingExtra ? 'جاري الرفع...' : 'رفع صور إضافية'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          style={{ display: 'none' }}
+                          disabled={uploadingExtra}
+                          onChange={async (e) => {
+                            const files = Array.from(e.target.files || []);
+                            e.target.value = '';
+                            if (files.length === 0) return;
+                            setUploadingExtra(true);
+                            try {
+                              const uploaded: string[] = [];
+                              for (const file of files) {
+                                const { publicUrl } = await uploadCatalogMedia(
+                                  file,
+                                  `${editing.store_id || 'admin'}/goods/extra`
+                                );
+                                uploaded.push(publicUrl);
+                              }
+                              setEditing((prev) =>
+                                prev
+                                  ? {
+                                      ...prev,
+                                      extra_image_urls: [
+                                        ...prev.extra_image_urls,
+                                        ...uploaded,
+                                      ],
+                                    }
+                                  : prev
+                              );
+                              notify(`تم رفع ${uploaded.length} صورة إضافية للمادة`);
+                            } catch (err) {
+                              notify(
+                                err instanceof Error ? err.message : 'فشل رفع الصور الإضافية',
+                                'error'
+                              );
+                            } finally {
+                              setUploadingExtra(false);
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <input
+                        type="url"
+                        className="input"
+                        dir="ltr"
+                        placeholder="أو الصق رابط صورة إضافية https://..."
+                        value={extraUrlInput}
+                        onChange={(e) => setExtraUrlInput(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={() => {
+                          const trimmed = extraUrlInput.trim();
+                          if (!trimmed) return;
+                          if (editing.extra_image_urls.includes(trimmed)) {
+                            setExtraUrlInput('');
+                            return;
+                          }
+                          setEditing({
+                            ...editing,
+                            extra_image_urls: [...editing.extra_image_urls, trimmed],
+                          });
+                          setExtraUrlInput('');
+                        }}
+                      >
+                        <Plus size={14} /> إضافة رابط
                       </button>
                     </div>
                   </div>

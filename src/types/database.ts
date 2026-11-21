@@ -163,6 +163,7 @@ export interface ProductRow {
   position: number;
   image_key: string | null;
   image_url: string | null;
+  extra_image_urls?: string[];
   source: string | null;
   details?: string | null;
   extra_units: ProductExtraUnit[];
