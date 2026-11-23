@@ -28,15 +28,8 @@ import {
   profileDisplayName,
 } from '../lib/constants';
 import { supabase } from '../lib/supabase';
+import { confirmationCodeFor } from '../lib/orderInvoice';
 import { useToast } from '../components/ToastContext';
-
-function confirmationCodeFor(id: string): string {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = (hash * 31 + id.charCodeAt(i)) & 0xfffff;
-  }
-  return String(hash).padStart(6, '0').slice(0, 6);
-}
 
 export function OrdersPage({
   orders,
@@ -163,9 +156,15 @@ export function OrdersPage({
     if (status === 'approved') patch.approved_at = new Date().toISOString();
     if (status === 'delivered') patch.delivered_at = new Date().toISOString();
 
-    const { error } = await supabase.from('orders').update(patch).eq('id', orderId);
+    const { data, error } = await supabase
+      .from('orders').update(patch).eq('id', orderId)
+      .select('id, status').single();
     if (error) {
       notify(error.message, 'error');
+      return;
+    }
+    if (data.status !== status) {
+      notify('لم يؤكد الخادم تغيير حالة الفاتورة. أعد تحميلها وحاول مجدداً.', 'error');
       return;
     }
     notify(`تم تحديث حالة الفاتورة إلى: ${ORDER_STATUS_META[status].label}`);
@@ -204,7 +203,8 @@ export function OrdersPage({
       const { error } = await supabase
         .from('orders')
         .update(payload)
-        .eq('id', activeOrder.id);
+        .eq('id', activeOrder.id)
+        .select('id').single();
       if (error) throw error;
       notify('تم حفظ بيانات ترويسة الفاتورة والحالة بنجاح');
       await onReload();
@@ -222,7 +222,8 @@ export function OrdersPage({
     const { error } = await supabase
       .from('order_items')
       .update(patch)
-      .eq('id', itemId);
+      .eq('id', itemId)
+      .select('id').single();
     if (error) {
       notify(error.message, 'error');
       return;
@@ -232,7 +233,8 @@ export function OrdersPage({
   };
 
   const handleDeleteOrderItem = async (itemId: string) => {
-    const { error } = await supabase.from('order_items').delete().eq('id', itemId);
+    const { error } = await supabase.from('order_items').delete()
+      .eq('id', itemId).select('id').single();
     if (error) {
       notify(error.message, 'error');
       return;
@@ -258,7 +260,7 @@ export function OrdersPage({
       unavailable: false,
       substitute_of: newItemSubOf || null,
       position: items.length,
-    });
+    }).select('id').single();
     if (error) {
       notify(error.message, 'error');
       return;

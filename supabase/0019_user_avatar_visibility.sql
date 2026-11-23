@@ -54,7 +54,7 @@ as $$
   where p.id = any(p_uids);
 $$;
 
-revoke all on function public.get_public_profiles(uuid[]) to public;
+revoke all on function public.get_public_profiles(uuid[]) from public;
 grant execute on function public.get_public_profiles(uuid[]) to authenticated;
 
 -- 4. ضمان صلاحية رفع المستخدم لصورته الشخصية في سلة catalog/users/<uid>/...
