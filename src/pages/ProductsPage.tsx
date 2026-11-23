@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { productIsAvailable } from '../lib/productStock';
 import {
   Search,
   Plus,
@@ -33,6 +34,8 @@ interface ProductFormState {
   unit: string;
   quantity: string;
   available: boolean;
+  stock_action?: 'hide' | 'show_unavailable';
+  stock_version?: number;
   position: string;
   source: string;
   details: string;
@@ -98,8 +101,8 @@ export function ProductsPage({
     return products.filter((p) => {
       if (effectiveStore !== 'all' && p.store_id !== effectiveStore) return false;
       if (categoryFilter !== 'all' && p.category_id !== categoryFilter) return false;
-      if (availFilter === 'available' && !p.available) return false;
-      if (availFilter === 'unavailable' && p.available) return false;
+      if (availFilter === 'available' && !productIsAvailable(p)) return false;
+      if (availFilter === 'unavailable' && productIsAvailable(p)) return false;
       if (!q) return true;
       const st = storeMap.get(p.store_id);
       const cat = p.category_id ? categoryMap.get(p.category_id) : null;
@@ -130,6 +133,7 @@ export function ProductsPage({
       unit: 'كيلو',
       quantity: '10',
       available: true,
+      stock_action: 'show_unavailable', stock_version: 0,
       position: String(filtered.length),
       source: '',
       details: '',
@@ -161,6 +165,7 @@ export function ProductsPage({
       unit: p.unit || 'كيلو',
       quantity: String(p.quantity ?? 0),
       available: Boolean(p.available),
+      stock_action: p.stock_action || 'show_unavailable', stock_version: p.stock_version || 0,
       position: String(p.position ?? 0),
       source: p.source || '',
       details: p.details || '',
@@ -207,6 +212,7 @@ export function ProductsPage({
       unit: p.unit,
       quantity: p.quantity,
       available: p.available,
+      stock_action: p.stock_action || 'show_unavailable',
       position: (p.position || 0) + 1,
       image_key: p.image_key,
       image_url: p.image_url,
@@ -265,6 +271,7 @@ export function ProductsPage({
         unit: editing.unit.trim() || 'كيلو',
         quantity: Number(editing.quantity || 0),
         available: editing.available,
+        stock_action: editing.stock_action || 'show_unavailable',
         position: Number(editing.position || 0),
         source: editing.source.trim().slice(0, 200) || null,
         details: editing.details.trim() === '' ? null : editing.details,
@@ -281,7 +288,7 @@ export function ProductsPage({
           return await supabase
             .from('products')
             .update(rowPayload)
-            .eq('id', editing.id);
+            .eq('id', editing.id).eq('stock_version', editing.stock_version || 0).select('id').single();
         }
         return await supabase.from('products').insert(rowPayload);
       };
@@ -289,6 +296,7 @@ export function ProductsPage({
       const attemptPayload: Record<string, unknown> = { ...payload };
       let error = (await saveProduct(attemptPayload)).error;
       while (error) {
+        if (error.code === 'PGRST116') throw new Error('تغيّرت الكمية بسبب فاتورة جديدة. حدّث المادة قبل الحفظ.');
         const msg = error.message?.toLowerCase() || '';
         let stripped = false;
         if (msg.includes('details') && 'details' in attemptPayload) {
@@ -547,7 +555,7 @@ export function ProductsPage({
               const checked = selectedIds.includes(p.id);
 
               return (
-                <tr key={p.id} className={!p.available ? 'row-faded' : ''}>
+                <tr key={p.id} className={!productIsAvailable(p) ? 'row-faded' : ''}>
                   <td>
                     <input
                       type="checkbox"
@@ -626,11 +634,11 @@ export function ProductsPage({
                     </div>
                     <button
                       type="button"
-                      className={`badge ${p.available ? 'badge-green' : 'badge-red'}`}
+                      className={`badge ${productIsAvailable(p) ? 'badge-green' : 'badge-red'}`}
                       style={{ border: 'none', cursor: 'pointer' }}
                       onClick={() => handleToggleAvailable(p)}
                     >
-                      {p.available ? '✓ متوفر' : '✕ غير متوفر'}
+                      {productIsAvailable(p) ? '✓ متوفر' : '✕ غير متوفرة الآن'}
                     </button>
                   </td>
                   <td>
@@ -805,6 +813,15 @@ export function ProductsPage({
                         <option key={u} value={u} />
                       ))}
                     </datalist>
+                  </div>
+
+                  <div className="field">
+                    <label>عند نفاد الكمية</label>
+                    <select className="select" value={editing.stock_action || 'show_unavailable'}
+                      onChange={e => setEditing({ ...editing, stock_action: e.target.value as 'hide' | 'show_unavailable' })}>
+                      <option value="show_unavailable">تبقى باهتة وغير متوفرة الآن</option>
+                      <option value="hide">إخفاء المادة من عرض المستهلك</option>
+                    </select>
                   </div>
 
                   <div className="field">

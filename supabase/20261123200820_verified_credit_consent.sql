@@ -17,6 +17,8 @@ set search_path = public, auth, pg_temp as $$
 $$;
 revoke all on function public.credit_eligible(uuid) from public, anon;
 grant execute on function public.credit_eligible(uuid) to authenticated;
+create index if not exists profiles_credit_contact_idx
+  on public.profiles(public.credit_phone(phone), lower(trim(email)));
 
 alter table public.credit_accounts
   add column if not exists consent_confirmed_at timestamptz,
@@ -63,6 +65,11 @@ begin
   if public.credit_phone(p_phone) !~ '^\+[1-9][0-9]{9,14}$' or p_email is null
      or trim(p_email) !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' then
     raise exception 'أدخل رقم الهاتف مع مفتاح الدولة والبريد الإلكتروني، كلاهما إلزامي';
+  end if;
+  if (select count(*) from public.profiles p where public.credit_eligible(p.id)
+    and public.credit_phone(p.phone) = public.credit_phone(p_phone)
+    and lower(trim(p.email)) = lower(trim(p_email))) > 1 then
+    raise exception 'بيانات التواصل تحتاج مراجعة الإدارة قبل فتح الدفتر';
   end if;
   select * into buyer from public.profiles p where public.credit_eligible(p.id)
     and public.credit_phone(p.phone) = public.credit_phone(p_phone)
@@ -201,8 +208,10 @@ begin
     or not public.credit_eligible(account.consumer_id) then
     raise exception 'يلزم حساب موثق وموافقة هاتف مؤكدة لاستخدام خدمة على الحساب';
   end if;
-  if tg_table_name = 'credit_entries' and new.kind in ('purchase','transferOut','debitAdjustment')
-    and account.balance < -account.credit_limit then raise exception 'المبلغ يتجاوز الرصيد والسقف المتاح'; end if;
+  if tg_table_name = 'credit_entries' then
+    if new.kind in ('purchase','transferOut','debitAdjustment') and account.balance < -account.credit_limit
+      then raise exception 'المبلغ يتجاوز الرصيد والسقف المتاح'; end if;
+  end if;
   return new;
 end;
 $$;

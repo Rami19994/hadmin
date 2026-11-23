@@ -64,6 +64,7 @@ Deno.serve(async (request: Request) => {
       'لا ترسل الرمز للتاجر. تجاهل الرسالة إن لم توافق. الرمز صالح 10 دقائق.';
     let sent = false;
     try { await sendSms(provider, invitation.phone, message); sent = true; }
+    catch { throw new Error('تعذر إرسال رسالة تأكيد الهاتف، حاول لاحقاً'); }
     finally {
       const { error: finishError } = await admin.rpc('finish_credit_sms', { p_id: invitation.id, p_sent: sent });
       if (finishError) throw finishError;

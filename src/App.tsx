@@ -382,6 +382,7 @@ function AdminApp() {
           {activePage === 'credit' && (
             <CreditPage
               creditAccounts={creditAccounts}
+              authUsers={authUsers}
               stores={stores}
               profiles={profiles}
               selectedStoreId={selectedStoreId}

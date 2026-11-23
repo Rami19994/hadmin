@@ -160,6 +160,9 @@ export interface ProductRow {
   unit: string;
   quantity: number;
   available: boolean;
+  stock_action?: 'hide' | 'show_unavailable';
+  stock_exhausted?: boolean;
+  stock_version?: number;
   position: number;
   image_key: string | null;
   image_url: string | null;

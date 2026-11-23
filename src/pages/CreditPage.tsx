@@ -10,6 +10,7 @@ import {
   X,
 } from 'lucide-react';
 import type {
+  AuthUserMeta,
   CreditAccountRow,
   CreditAccountStatus,
   CreditEntryKind,
@@ -44,12 +45,14 @@ export function CreditPage({
   creditAccounts,
   stores,
   profiles,
+  authUsers,
   selectedStoreId,
   onReload,
 }: {
   creditAccounts: CreditAccountRow[];
   stores: StoreRow[];
   profiles: Profile[];
+  authUsers: AuthUserMeta[];
   selectedStoreId: string;
   onReload: () => Promise<void>;
 }) {
@@ -509,7 +512,8 @@ export function CreditPage({
                       }}
                     >
                       <option value="">— اختر المستهلك —</option>
-                      {profiles.filter(p => p.trust === 'identified' && !p.is_suspended && p.phone?.trim() && p.email?.trim()).map((p) => (
+                      {profiles.filter(p => p.trust === 'identified' && !p.is_suspended && p.phone?.trim() && p.email?.trim()
+                        && authUsers.some(u => u.id === p.id && !u.is_anonymous)).map((p) => (
                         <option key={p.id} value={p.id}>
                           {profileDisplayName(p)} ({p.phone || p.email || p.id.slice(0, 8)})
                         </option>
