@@ -117,6 +117,7 @@ declare
   old_store uuid;
   line jsonb;
   saved public.order_items;
+  shop public.stores;
   position_no integer := 0;
 begin
   if auth.uid() is null then raise exception 'سجّل الدخول لإرسال الطلب'; end if;
@@ -142,10 +143,14 @@ begin
   if jsonb_array_length(p_items) not between 1 and 200 then
     raise exception 'يجب أن يحتوي الطلب على مادة واحدة إلى 200 مادة';
   end if;
+  select * into shop from public.stores where id = p_store_id and status = 'approved';
+  if shop.id is null then raise exception 'هذا المتجر غير متاح لاستقبال الطلبات'; end if;
   insert into public.orders (store_id, consumer_id, address, payment_method,
-    client_request_id, note, cash_denomination, customer_name, customer_phone)
+    client_request_id, note, cash_denomination, customer_name, customer_phone,
+    currency, vat_percent)
   values (p_store_id, auth.uid(), trim(p_address), p_payment_method,
-    p_request_id, p_note, p_cash_denomination, p_customer_name, p_customer_phone)
+    p_request_id, p_note, p_cash_denomination, p_customer_name, p_customer_phone,
+    shop.currency, case when shop.vat_enabled then shop.vat_percent else 0 end)
   on conflict (consumer_id, client_request_id) where client_request_id is not null
     do nothing returning id into order_id;
   if order_id is null then
