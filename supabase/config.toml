@@ -1,0 +1,6 @@
+project_id = "h-store"
+
+[functions.credit-invitations]
+# Public confirmation is protected by a short-lived, attempt-limited OTP.
+# Merchant requests verify the JWT with Auth inside the handler.
+verify_jwt = false

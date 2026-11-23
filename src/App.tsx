@@ -38,7 +38,14 @@ import { CustomerDataPage } from './pages/CustomerDataPage';
 import { AdvertsPage } from './pages/AdvertsPage';
 import { SettingsPage } from './pages/SettingsPage';
 
+import { CreditConsentPage } from './pages/CreditConsentPage';
+
 export default function App() {
+  if (window.location.pathname === '/credit-consent') return <CreditConsentPage />;
+  return <AdminApp />;
+}
+
+function AdminApp() {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [authLoading, setAuthLoading] = useState(true);

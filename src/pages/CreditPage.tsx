@@ -25,6 +25,7 @@ import {
   profileDisplayName,
 } from '../lib/constants';
 import { supabase } from '../lib/supabase';
+import { requestCreditInvitation } from '../lib/creditInvitations';
 import { ConfirmModal, useToast } from '../components/ToastContext';
 
 interface AccountFormState {
@@ -33,6 +34,7 @@ interface AccountFormState {
   consumer_id: string;
   customer_name: string;
   customer_phone: string;
+  customer_email?: string;
   status: CreditAccountStatus;
   credit_limit: string;
   identity_verified: boolean;
@@ -144,7 +146,7 @@ export function CreditPage({
         customer_phone: editing.customer_phone.trim() || null,
         status: editing.status,
         credit_limit: Math.max(0, Number(editing.credit_limit || 0)),
-        identity_verified: editing.identity_verified,
+
       };
 
       if (editing.id) {
@@ -154,11 +156,13 @@ export function CreditPage({
           .eq('id', editing.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('credit_accounts').insert(payload);
-        if (error) throw error;
+        const profile = profileMap.get(editing.consumer_id);
+        const email = (editing.customer_email || profile?.email || '').trim();
+        if (!editing.customer_phone.trim() || !email) throw new Error('الهاتف والبريد الإلكتروني إلزاميان');
+        await requestCreditInvitation(editing.store_id, editing.customer_phone.trim(), email);
       }
 
-      notify(editing.id ? 'تم تحديث بيانات حساب الائتمان' : 'تم فتح دفتر على الحساب بنجاح');
+      notify(editing.id ? 'تم تحديث بيانات حساب الائتمان' : 'أُرسلت رسالة موافقة للمستهلك؛ يفتح الدفتر بعد تأكيده بنفسه');
       setEditing(null);
       await onReload();
     } catch (err) {
@@ -312,7 +316,7 @@ export function CreditPage({
                 consumer_id: profiles[0]?.id || '',
                 customer_name: '',
                 customer_phone: '',
-                status: 'approved',
+                status: 'pending',
                 credit_limit: '500',
                 identity_verified: true,
               })
@@ -500,11 +504,12 @@ export function CreditPage({
                           consumer_id: e.target.value,
                           customer_name: pr ? profileDisplayName(pr) : editing.customer_name,
                           customer_phone: pr?.phone || editing.customer_phone,
+                          customer_email: pr?.email || '',
                         });
                       }}
                     >
                       <option value="">— اختر المستهلك —</option>
-                      {profiles.map((p) => (
+                      {profiles.filter(p => p.trust === 'identified' && !p.is_suspended && p.phone?.trim() && p.email?.trim()).map((p) => (
                         <option key={p.id} value={p.id}>
                           {profileDisplayName(p)} ({p.phone || p.email || p.id.slice(0, 8)})
                         </option>
@@ -525,11 +530,13 @@ export function CreditPage({
                   </div>
 
                   <div className="field">
-                    <label>هاتف العميل</label>
+                    <label>هاتف العميل مع مفتاح الدولة *</label>
                     <input
                       type="text"
                       className="input"
                       dir="ltr"
+                      required
+                      disabled={Boolean(editing.id)}
                       value={editing.customer_phone}
                       onChange={(e) =>
                         setEditing({ ...editing, customer_phone: e.target.value })
@@ -537,11 +544,19 @@ export function CreditPage({
                     />
                   </div>
 
+                  {!editing.id && <div className="field">
+                    <label>البريد الإلكتروني *</label>
+                    <input className="input" type="email" required dir="ltr"
+                      value={editing.customer_email || profileMap.get(editing.consumer_id)?.email || ''}
+                      onChange={e => setEditing({ ...editing, customer_email: e.target.value })} />
+                  </div>}
+
                   <div className="field">
                     <label>حالة الدفتر</label>
                     <select
                       className="select"
                       value={editing.status}
+                      disabled={!editing.id}
                       onChange={(e) =>
                         setEditing({
                           ...editing,
@@ -575,12 +590,10 @@ export function CreditPage({
                     <label className="checkbox-row">
                       <input
                         type="checkbox"
-                        checked={editing.identity_verified}
-                        onChange={(e) =>
-                          setEditing({ ...editing, identity_verified: e.target.checked })
-                        }
+                        checked={profileMap.get(editing.consumer_id)?.trust === 'identified'}
+                        disabled
                       />
-                      تم التحقق من الهوية الشخصية للعميل لهذا الدفتر
+                      توثيق الهوية يعتمد على موافقة الإدارة في قسم المستخدمين، وفتح الدفتر يحتاج تأكيد الهاتف
                     </label>
                   </div>
                 </div>
@@ -594,7 +607,7 @@ export function CreditPage({
                   إلغاء
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={saving}>
-                  {saving ? 'جاري الحفظ...' : 'حفظ الدفتر'}
+                  {saving ? 'جارٍ المعالجة…' : editing.id ? 'حفظ الدفتر' : 'إرسال طلب تأكيد الهاتف'}
                 </button>
               </div>
             </form>
